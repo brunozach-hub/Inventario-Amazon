@@ -223,12 +223,13 @@
             }
           };
           const startDrawing = (e) => {
+            if (!isSigningActive) return; // <-- ADICIONADO: Guarda de segurança
             const pos = getPos(e);
             lastPos.current = pos;
             setIsDrawing(true);
           };
           const draw = (e) => {
-            if (!isDrawing) return;
+            if (!isDrawing || !isSigningActive) return; // <-- ADICIONADO: Guarda de segurança
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             const pos = getPos(e);
