@@ -288,10 +288,12 @@
           return (
             <div className="flex flex-col gap-2 p-4 border rounded-lg border-amazon-orange/30 neon-shadow-orange-sm">
               <h3 className="text-lg font-semibold text-center text-white">{title}</h3>
-              <div className="relative w-full h-40 bg-gray-100 rounded-md touch-none">
+              {/* 'touch-none' movido para o canvas para funcionar em mobile */}
+              <div className="relative w-full h-40 bg-gray-100 rounded-md">
+                {/* Canvas nativo */}
                 <canvas
                   ref={canvasRef}
-                  className="w-full h-full rounded-md"
+                  className="w-full h-full rounded-md touch-none"
                 />
               </div>
               <div className="flex justify-center gap-4">
