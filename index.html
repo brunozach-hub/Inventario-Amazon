@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Inventário Amazon (Protótipo Firebase)</title>
     
     <!-- 1. Carrega o TailwindCSS para estilos -->
@@ -21,10 +21,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
     
-    <!-- 5. (CORRIGIDO) Carrega a biblioteca de Assinatura (A Solução Garantida) -->
-    <!-- Trocado o CDN de 'unpkg' para 'jsdelivr' para tentar resolver o problema de carregamento -->
-    <script src="https://cdn.jsdelivr.net/npm/react-signature-canvas@1.0.6/build/react-signature-canvas.umd.min.js" crossorigin></script>
-
+    <!-- REMOVEMOS a biblioteca 'react-signature-canvas' que estava a falhar -->
 
 </head>
 <body class="bg-gray-900">
@@ -35,8 +32,8 @@
 
         /**
          * Sistema de Inventário (TI & EPI)
-         * Versão Firebase com fluxo de "Folha Virtual" (pending_transactions)
-         * V.Final - Revertido para 'react-signature-canvas' para garantir o 'touch'
+         * Versão Firebase com fluxo de Assinatura Direta (Sem QR Code).
+         * V.Final - Usa Canvas Nativo com correção de scroll lock para 'touch'.
          */
 
         const { useState, useEffect, useRef, createContext, useContext } = React;
@@ -94,8 +91,8 @@
           History: (props) => (
             <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
           ),
-          QrCode: (props) => (
-            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Signature: (props) => ( // Alterado de QrCode
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h12.5"/><path d="m22 14-4 4-1.5-1.5"/></svg>
           ),
           Tablet: (props) => (
             <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
@@ -199,24 +196,104 @@
 
         const useAuth = () => useContext(AuthContext);
 
-        // --- Componente de Assinatura (REVERTIDO PARA BIBLIOTECA) ---
+        // --- Componente de Assinatura (Canvas Nativo com Correção de Touch) ---
         const SignatureCapture = ({ title, onSave }) => {
-          const sigPadRef = useRef(null);
-          // Acede à biblioteca 'react-signature-canvas' carregada no window
-          // CORREÇÃO: O nome global é SignaturePad
-          const SignaturePad = window.SignaturePad;
+          const canvasRef = useRef(null);
+          const [isDrawing, setIsDrawing] = useState(false);
+          const [isEmpty, setIsEmpty] = useState(true);
+          const lastPos = useRef({ x: 0, y: 0 });
 
-          const clear = () => {
-            sigPadRef.current.clear();
+          const getPos = (e) => {
+            // Previne o scroll da página enquanto desenha no tablet
+            e.preventDefault(); 
+            
+            const rect = canvasRef.current.getBoundingClientRect();
+            const scaleX = canvasRef.current.width / rect.width;
+            const scaleY = canvasRef.current.height / rect.height;
+            if (e.touches && e.touches.length > 0) {
+              return {
+                x: (e.touches[0].clientX - rect.left) * scaleX,
+                y: (e.touches[0].clientY - rect.top) * scaleY,
+              };
+            } else {
+              return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY,
+              };
+            }
+          };
+          const startDrawing = (e) => {
+            const pos = getPos(e);
+            lastPos.current = pos;
+            setIsDrawing(true);
+          };
+          const draw = (e) => {
+            if (!isDrawing) return;
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(lastPos.current.x, lastPos.current.y);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            lastPos.current = pos;
+            setIsEmpty(false);
+          };
+          const stopDrawing = (e) => {
+            setIsDrawing(false);
           };
           
+          useEffect(() => {
+            const canvas = canvasRef.current;
+            if (!canvas) return; 
+            const rect = canvas.getBoundingClientRect();
+            const dpi = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpi;
+            canvas.height = rect.height * dpi;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return; 
+            ctx.scale(dpi, dpi);
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // Eventos do Mouse
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing); 
+            
+            // Eventos de Toque (para tablet)
+            // 'passive: false' é crucial para o e.preventDefault() funcionar
+            const options = { passive: false };
+            canvas.addEventListener('touchstart', startDrawing, options);
+            canvas.addEventListener('touchmove', draw, options);
+            canvas.addEventListener('touchend', stopDrawing, options);
+
+            return () => {
+              canvas.removeEventListener('mousedown', startDrawing);
+              canvas.removeEventListener('mousemove', draw);
+              canvas.removeEventListener('mouseup', stopDrawing);
+              canvas.removeEventListener('mouseout', stopDrawing);
+              canvas.removeEventListener('touchstart', startDrawing, options);
+              canvas.removeEventListener('touchmove', draw, options);
+              canvas.removeEventListener('touchend', stopDrawing, options);
+            };
+          }, []); // Executa apenas uma vez
+
+          const clear = () => {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            setIsEmpty(true);
+          };
           const save = () => {
-            if (sigPadRef.current.isEmpty()) {
+            if (isEmpty) {
               alert("Por favor, forneça a assinatura.");
               return;
             }
-            // A biblioteca usa esta função exata, tal como o nosso componente manual
-            const sigDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL('image/png');
+            const sigDataUrl = canvasRef.current.toDataURL('image/png');
             onSave(sigDataUrl);
           };
 
@@ -224,12 +301,10 @@
             <div className="flex flex-col gap-2 p-4 border rounded-lg border-amazon-orange/30 neon-shadow-orange-sm">
               <h3 className="text-lg font-semibold text-center text-white">{title}</h3>
               {/* 'touch-none' é importante para o Tailwind não interferir com os eventos de toque */}
-              <div className="relative w-full h-40 bg-gray-100 rounded-md">
-                <SignaturePad
-                  ref={sigPadRef}
-                  canvasProps={{
-                    className: 'w-full h-full rounded-md' // A biblioteca trata do touch
-                  }}
+              <div className="relative w-full h-40 bg-gray-100 rounded-md touch-none">
+                <canvas
+                  ref={canvasRef}
+                  className="w-full h-full rounded-md touch-none" // A classe 'touch-none' é CRÍTICA
                 />
               </div>
               <div className="flex justify-center gap-4">
@@ -560,7 +635,7 @@
               selectedItemDocId: selectedItem.docId, // ID do doc para atualizar o estoque
               sector: sector, // Adiciona o setor para as regras
             };
-            onSubmit(transaction); // Envia para o App (que mostrará o Modal)
+            onSubmit(transaction); // Envia para o App (que navegará para 'sign')
           };
 
           return (
@@ -606,8 +681,8 @@
                   type="submit"
                   className="flex items-center justify-center w-full gap-2 px-4 py-3 font-semibold text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800 neon-shadow-orange-lg"
                 >
-                  <Icon name="QrCode" size={20} />
-                  Gerar QR Code para Assinaturas
+                  <Icon name="Signature" size={20} />
+                  Ir para Assinaturas
                 </button>
               </form>
             </div>
@@ -700,8 +775,8 @@
                   type="submit"
                   className="flex items-center justify-center w-full gap-2 px-4 py-3 font-semibold text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800 neon-shadow-orange-lg"
                 >
-                  <Icon name="QrCode" size={20} />
-                  Gerar QR Code para Assinatura
+                  <Icon name="Signature" size={20} />
+                  Ir para Assinatura
                 </button>
               </form>
             </div>
@@ -975,108 +1050,12 @@
           );
         };
 
-        // --- Modal: QR Code (REESCRITO PARA FLUXO PENDENTE) ---
-        const SignatureModal = ({ transaction, onClose, onListen }) => {
-          const [loading, setLoading] = useState(true);
-          const [qrCodeUrl, setQrCodeUrl] = useState('');
-          const [error, setError] = useState('');
-
-          useEffect(() => {
-            const setupTransaction = async () => {
-              try {
-                // 1. Salva a transação como "pendente" no Firestore
-                const docRef = db.collection('pending_transactions').doc(transaction.tx_id);
-                await docRef.set({
-                  ...transaction,
-                  status: 'pending'
-                });
-
-                // 2. Gera o link e o QR Code
-                const signUrl = `${window.location.origin}${window.location.pathname}?tx_id=${transaction.tx_id}`;
-                setQrCodeUrl(`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(signUrl)}`);
-                setLoading(false);
-                
-                // 3. Ouve por mudanças (o "onListen" vem do App)
-                onListen(transaction.tx_id);
-
-              } catch (err) {
-                console.error("Erro ao criar transação pendente:", err);
-                setError("Falha ao criar QR Code. Tente novamente.");
-                setLoading(false);
-              }
-            };
-            setupTransaction();
-          }, [transaction]); // Executa uma vez
-          
-          return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-              <div className="relative w-full max-w-lg p-8 bg-gray-800 border rounded-lg border-amazon-orange/30 neon-shadow-orange-lg">
-                <button onClick={onClose} className="absolute text-gray-400 top-4 right-4 hover:text-white">
-                  <Icon name="X" size={24} />
-                </button>
-                <h2 className="flex items-center gap-3 mb-6 text-2xl font-bold text-white">
-                  <Icon name="Tablet" size={28} className="text-amazon-orange" />
-                  Assinatura no Tablet
-                </h2>
-                
-                {loading && !error && (
-                  <LoadingSpinner text="A gerar QR Code seguro..." />
-                )}
-
-                {error && (
-                  <p className="text-center text-red-400">{error}</p>
-                )}
-
-                {!loading && !error && (
-                  <React.Fragment>
-                    <p className="mb-4 text-center text-gray-300">
-                      Use a câmera do tablet/telemóvel para escanear o QR Code.
-                    </p>
-                    <div className="flex justify-center p-4 bg-white rounded-lg">
-                      <img src={qrCodeUrl} alt="QR Code para assinatura" width="250" height="250" />
-                    </div>
-                    <p className="mt-6 text-sm text-center text-gray-400">
-                      A aguardar pela assinatura...
-                    </p>
-                  </React.Fragment>
-                )}
-              </div>
-            </div>
-          );
-        };
-
-        // --- Página: Assinatura (REESCRITA PARA "FOLHA VIRTUAL") ---
-        const VirtualSheetPage = ({ txId }) => {
-          const [transaction, setTransaction] = useState(null);
-          const [loading, setLoading] = useState(true);
-          const [error, setError] = useState('');
+        // --- Página: Assinatura (FLUXO DIRETO) ---
+        const SignaturePage = ({ transaction, onComplete, onCancel }) => {
           const [delivererSig, setDelivererSig] = useState(null); // Base64
           const [receiverSig, setReceiverSig] = useState(null); // Base64
           const [isSaving, setIsSaving] = useState(false);
-          const [isComplete, setIsComplete] = useState(false);
 
-          // 1. Busca os dados da transação pendente
-          useEffect(() => {
-            const fetchTx = async () => {
-              try {
-                const docRef = db.collection('pending_transactions').doc(txId);
-                const doc = await docRef.get();
-                if (!doc.exists) {
-                  setError("Transação não encontrada ou expirada.");
-                } else if (doc.data().status === 'completed') {
-                  setIsComplete(true);
-                } else {
-                  setTransaction(doc.data());
-                }
-              } catch (err) {
-                console.error("Erro ao buscar transação:", err);
-                setError("Erro ao carregar dados. Tente ler o QR Code novamente.");
-              }
-              setLoading(false);
-            };
-            fetchTx();
-          }, [txId]);
-          
           // --- CORREÇÃO GARANTIDA PARA TOUCH ---
           // Força o bloqueio do scroll na página inteira
           // para que o navegador não "roube" os eventos de toque.
@@ -1107,12 +1086,13 @@
 
           // Salva a transação final
           const handleFinalize = async () => {
-            const isDeliver = transaction.type === 'deliver'; // Move a definição para aqui
+            const isDeliver = transaction.type === 'deliver';
             if (!delivererSig || (isDeliver && !receiverSig)) {
               alert("Todas as assinaturas obrigatórias devem ser fornecidas.");
               return;
             }
             setIsSaving(true);
+            
             try {
               // 1. Enviar Assinatura do Entregador
               const delivererBlob = dataURLtoBlob(delivererSig);
@@ -1121,7 +1101,7 @@
               const delivererSigUrl = await delivererRef.getDownloadURL();
 
               let receiverSigUrl = null;
-              // 2. Enviar Assinatura do Recebedor
+              // 2. Enviar Assinatura do Recebedor (se for entrega)
               if (isDeliver) {
                 const receiverBlob = dataURLtoBlob(receiverSig);
                 const receiverRef = storage.ref(`signatures/${transaction.tx_id}/receiver.png`);
@@ -1129,16 +1109,25 @@
                 receiverSigUrl = await receiverRef.getDownloadURL();
               }
               
-              // 3. Atualizar o documento da transação para "completed"
-              const docRef = db.collection('pending_transactions').doc(txId);
-              await docRef.update({
-                status: 'completed',
+              // 3. Criar o documento final no "history"
+              const historyDoc = {
+                ...transaction,
                 delivererSigUrl: delivererSigUrl || null,
                 receiverSigUrl: receiverSigUrl || null
-              });
+              };
+              await db.collection('history').add(historyDoc);
+
+              // 4. Atualizar (diminuir) o stock
+              if (transaction.selectedItemDocId) {
+                const itemRef = db.collection('inventory').doc(transaction.selectedItemDocId);
+                await itemRef.update({
+                  quantidade: firebase.firestore.FieldValue.increment(-1)
+                });
+              }
 
               setIsSaving(false);
-              setIsComplete(true); // Mostra a tela de sucesso
+              alert('Transação finalizada e salva com sucesso!');
+              onComplete(); // Navega de volta para o dashboard
             
             } catch (error) {
               console.error("Erro ao finalizar transação:", error);
@@ -1147,39 +1136,6 @@
             }
           };
           
-          if (loading) {
-            return (
-              <div className="flex items-center justify-center min-h-screen p-4 bg-gray-900">
-                <LoadingSpinner text="A carregar dados da transação..." />
-              </div>
-            );
-          }
-          
-          if (error) {
-             return (
-              <div className="flex items-center justify-center min-h-screen p-4 bg-gray-900">
-                <div className="w-full max-w-md p-8 text-center bg-gray-800 rounded-lg">
-                    <Icon name="X" size={64} className="mx-auto text-red-500" />
-                    <h2 className="mt-4 text-2xl font-bold text-white">Erro</h2>
-                    <p className="mt-2 text-gray-300">{error}</p>
-                </div>
-              </div>
-            );
-          }
-          
-          if (isComplete) {
-             return (
-              <div className="flex items-center justify-center min-h-screen p-4 bg-gray-900">
-                <div className="w-full max-w-md p-8 text-center bg-gray-800 rounded-lg">
-                    <Icon name="Check" size={64} className="mx-auto text-green-500" />
-                    <h2 className="mt-4 text-2xl font-bold text-white">Assinatura Concluída!</h2>
-                    <p className="mt-2 text-gray-300">Os dados foram salvos com sucesso. Já pode fechar esta janela.</p>
-                </div>
-              </div>
-            );
-          }
-          
-          // Correção: Apenas aceda a 'transaction.type' se 'transaction' não for nulo.
           if (!transaction) {
              return (
               <div className="flex items-center justify-center min-h-screen p-4 bg-gray-900">
@@ -1198,6 +1154,7 @@
           return (
             <div className="min-h-screen p-4 text-gray-200 bg-gray-900 font-inter">
               <div className="max-w-4xl p-2 mx-auto md:p-8">
+                <BackButton onClick={onCancel} />
                 <h2 className="flex items-center gap-3 mb-6 text-3xl font-bold text-white">
                   <Icon name="Tablet" size={32} className="text-amazon-orange" />
                   Coletar Assinaturas
@@ -1276,92 +1233,32 @@
           const { user, logout, sector, username } = useAuth();
           const [currentPage, setCurrentPage] = useState('dashboard');
           const [currentTx, setCurrentTx] = useState(null); // Armazena o OBJETO da transação
-          const [showModal, setShowModal] = useState(false);
-          
-          // Ouve o hook de inventário (para diminuição de stock)
-          const { items: inventoryItems } = useInventory(sector); 
-
-          // Cancela o "ouvinte" da transação pendente
-          const pendingTxUnsubscribe = useRef(null);
-
-          // Função para o PC "ouvir" a transação que abriu
-          const listenToTransaction = (txId) => {
-            // Se já estivermos a ouvir, cancela o anterior
-            if (pendingTxUnsubscribe.current) {
-              pendingTxUnsubscribe.current();
-            }
-
-            const docRef = db.collection('pending_transactions').doc(txId);
-            
-            pendingTxUnsubscribe.current = docRef.onSnapshot(async (doc) => {
-              const data = doc.data();
-              if (data && data.status === 'completed') {
-                
-                // 1. Transação concluída!
-                console.log("Transação completa! A mover para o histórico.");
-                
-                // 2. Mover para o histórico
-                const historyData = { ...data };
-                delete historyData.status; // Limpa o status
-                await db.collection('history').add(historyData);
-
-                // 3. Diminuir o stock
-                if (data.selectedItemDocId) {
-                  try {
-                    const itemRef = db.collection('inventory').doc(data.selectedItemDocId);
-                    // Diminui o stock por 1
-                    await itemRef.update({
-                      quantidade: firebase.firestore.FieldValue.increment(-1)
-                    });
-                  } catch (err) {
-                    console.error("Falha ao atualizar o estoque:", err);
-                    // Não bloquear o utilizador, mas registar o erro
-                  }
-                }
-                
-                // 4. Limpar a transação pendente
-                await docRef.delete();
-                
-                // 5. Fechar o Modal
-                if (pendingTxUnsubscribe.current) {
-                  pendingTxUnsubscribe.current(); // Para de ouvir
-                  pendingTxUnsubscribe.current = null;
-                }
-                setShowModal(false);
-                setCurrentTx(null);
-                alert("Assinatura recebida e transação concluída!");
-              }
-            });
-          };
-          
-          // Limpa o listener se o utilizador fechar o modal ou fizer logout
-          const closeTransaction = () => {
-            if (pendingTxUnsubscribe.current) {
-              pendingTxUnsubscribe.current();
-              pendingTxUnsubscribe.current = null;
-            }
-            // Apagar a transação pendente se for cancelada
-            if (currentTx) {
-               db.collection('pending_transactions').doc(currentTx.tx_id).delete()
-                 .catch(err => console.warn("Falha ao limpar tx pendente", err));
-            }
-            setShowModal(false);
-            setCurrentTx(null);
-          };
 
           const navigate = (page) => {
             setCurrentPage(page);
           };
 
-          // Passo 1 (PC): Cria a transação pendente
+          // Passo 1 (PC/Tablet): Guarda a transação e navega para a página de assinatura
           const handleFormSubmit = (transaction) => {
             setCurrentTx(transaction); // Guarda o OBJETO
-            setShowModal(true); // Abre o modal (que irá criar a tx)
+            navigate('sign'); // Navega para a página de assinatura
+          };
+
+          // Cancela o fluxo de assinatura
+          const handleSignatureCancel = () => {
+            setCurrentTx(null);
+            setCurrentPage('dashboard');
+          };
+
+          // Finaliza o fluxo (chamado pela SignaturePage)
+          const handleSignatureComplete = () => {
+            setCurrentTx(null);
+            setCurrentPage('dashboard');
           };
 
           // Renderização principal
           if (!user) {
-            return <LoginPage />; // Utilizador Admin (PC)
+            return <LoginPage />; // Utilizador Admin (PC ou Tablet)
           }
 
           // Renderiza o layout principal após o login
@@ -1379,6 +1276,12 @@
                 return <HistoryPage onNavigate={navigate} />;
               case 'inventory':
                 return <InventoryPage onNavigate={navigate} />;
+              case 'sign': // <-- NOVA PÁGINA DE ASSINATURA
+                return <SignaturePage 
+                         transaction={currentTx} 
+                         onComplete={handleSignatureComplete} 
+                         onCancel={handleSignatureCancel}
+                       />;
               default:
                 return <DashboardPage onNavigate={navigate} />;
             }
@@ -1414,14 +1317,7 @@
                 {renderPage()}
               </main>
 
-              {/* Modal (quando showModal === true) */}
-              {showModal && currentTx && (
-                <SignatureModal 
-                  transaction={currentTx}
-                  onClose={closeTransaction} // Se o utilizador fechar o modal
-                  onListen={listenToTransaction} // Para o modal começar a ouvir
-                />
-              )}
+              {/* O Modal do QR Code foi REMOVIDO */}
             </div>
           );
         };
@@ -1455,42 +1351,23 @@
         const AppWrapper = () => {
           const [txId, setTxId] = useState(null);
           const [isCheckingUrl, setIsCheckingUrl] = useState(true);
-          const [libsLoaded, setLibsLoaded] = useState(false); // (NOVO)
           const [error, setError] = useState(null);
+          
+          // REMOVIDO: A verificação da biblioteca de assinatura já não é necessária
 
           useEffect(() => {
             // Verifica se a URL contém um tx_id (fluxo do tablet)
+            // ESTA LÓGICA JÁ NÃO É NECESSÁRIA, mas não faz mal
             const params = new URLSearchParams(window.location.search);
             const urlTxId = params.get('tx_id');
             if (urlTxId) {
-              setTxId(urlTxId);
+              console.warn("URL de transação detetada, mas este fluxo foi descontinuado. A redirecionar para o login.");
+              // Limpa a URL para evitar loops
+              window.history.replaceState({}, document.title, window.location.pathname);
             }
             setIsCheckingUrl(false);
           }, []); // Verifica a URL
           
-          useEffect(() => {
-             // Verifica se a biblioteca de assinatura carregou
-             // Espera até 3 segundos
-            if (window.SignaturePad) { // <-- CORRIGIDO
-                setLibsLoaded(true);
-                return;
-            }
-            
-            let attempts = 0;
-            const interval = setInterval(() => {
-                if (window.SignaturePad) { // <-- CORRIGIDO
-                    setLibsLoaded(true);
-                    clearInterval(interval);
-                } else if (attempts > 30) { // 3 segundos
-                    clearInterval(interval);
-                    console.error("ERRO CRÍTICO: react-signature-canvas (SignaturePad) não carregou.");
-                    setError("Não foi possível carregar o módulo de assinatura.");
-                }
-                attempts++;
-            }, 100);
-            
-            return () => clearInterval(interval);
-          }, []); // Verifica a biblioteca
 
           // Verifica se o config do Firebase foi preenchido
           if (!firebaseConfig || firebaseConfig.apiKey.startsWith("AIzaSy") === false) {
@@ -1515,7 +1392,7 @@
             );
           }
           
-          if (isCheckingUrl || !libsLoaded) {
+          if (isCheckingUrl) {
              return (
               <div className="flex items-center justify-center h-screen bg-gray-900 text-amazon-orange">
                 <p className="text-2xl animate-pulse">A carregar aplicação...</p>
@@ -1523,17 +1400,7 @@
             );
           }
 
-          // Se a URL tiver um tx_id, mostra a "Folha Virtual" (sem login)
-          if (txId) {
-            return (
-              <React.Fragment>
-                <GlobalStyles />
-                <VirtualSheetPage txId={txId} />
-              </React.Fragment>
-            );
-          }
-
-          // Caso contrário, mostra a aplicação de Admin completa (com login)
+          // A "Folha Virtual" foi REMOVIDA. A aplicação agora é UNA.
           return (
             <AuthProvider>
               <GlobalStyles />
