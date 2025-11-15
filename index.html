@@ -16,11 +16,15 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <!-- 4. Carrega os SDKs do Firebase (MUITO IMPORTANTE) -->
-    <!-- Usamos a versão 8.x.x que é compatível com este tipo de importação "global" -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    
+    <!-- 5. (CORRIGIDO) Carrega a biblioteca de Assinatura (A Solução Garantida) -->
+    <!-- Trocado o CDN de 'unpkg' para 'jsdelivr' para tentar resolver o problema de carregamento -->
+    <script src="https://cdn.jsdelivr.net/npm/react-signature-canvas@1.0.6/build/react-signature-canvas.umd.min.js" crossorigin></script>
+
 
 </head>
 <body class="bg-gray-900">
@@ -32,7 +36,7 @@
         /**
          * Sistema de Inventário (TI & EPI)
          * Versão Firebase com fluxo de "Folha Virtual" (pending_transactions)
-         * V.Final - Corrigido problema de 'touch' (com bloqueio de scroll)
+         * V.Final - Revertido para 'react-signature-canvas' para garantir o 'touch'
          */
 
         const { useState, useEffect, useRef, createContext, useContext } = React;
@@ -195,105 +199,24 @@
 
         const useAuth = () => useContext(AuthContext);
 
-        // --- Componente de Assinatura (Canvas Nativo) ---
+        // --- Componente de Assinatura (REVERTIDO PARA BIBLIOTECA) ---
         const SignatureCapture = ({ title, onSave }) => {
-          const canvasRef = useRef(null);
-          const [isDrawing, setIsDrawing] = useState(false);
-          const [isEmpty, setIsEmpty] = useState(true);
-          const lastPos = useRef({ x: 0, y: 0 });
-
-          const getPos = (e) => {
-            // Previne o scroll da página enquanto desenha no tablet
-            // Esta é a parte MAIS IMPORTANTE para o 'touch' funcionar.
-            e.preventDefault(); 
-            
-            const rect = canvasRef.current.getBoundingClientRect();
-            const scaleX = canvasRef.current.width / rect.width;
-            const scaleY = canvasRef.current.height / rect.height;
-            if (e.touches && e.touches.length > 0) {
-              return {
-                x: (e.touches[0].clientX - rect.left) * scaleX,
-                y: (e.touches[0].clientY - rect.top) * scaleY,
-              };
-            } else {
-              return {
-                x: (e.clientX - rect.left) * scaleX,
-                y: (e.clientY - rect.top) * scaleY,
-              };
-            }
-          };
-          const startDrawing = (e) => {
-            const pos = getPos(e);
-            lastPos.current = pos;
-            setIsDrawing(true);
-          };
-          const draw = (e) => {
-            if (!isDrawing) return;
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
-            const pos = getPos(e);
-            ctx.beginPath();
-            ctx.moveTo(lastPos.current.x, lastPos.current.y);
-            ctx.lineTo(pos.x, pos.y);
-            ctx.stroke();
-            lastPos.current = pos;
-            setIsEmpty(false);
-          };
-          const stopDrawing = (e) => {
-            setIsDrawing(false);
-          };
-          
-          useEffect(() => {
-            const canvas = canvasRef.current;
-            if (!canvas) return; 
-            const rect = canvas.getBoundingClientRect();
-            const dpi = window.devicePixelRatio || 1;
-            canvas.width = rect.width * dpi;
-            canvas.height = rect.height * dpi;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return; 
-            ctx.scale(dpi, dpi);
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            
-            // Eventos do Mouse
-            canvas.addEventListener('mousedown', startDrawing);
-            canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('mouseup', stopDrawing);
-            canvas.addEventListener('mouseout', stopDrawing); 
-            
-            // Eventos de Toque (para tablet)
-            // 'passive: false' é crucial para o e.preventDefault() funcionar
-            const options = { passive: false };
-            canvas.addEventListener('touchstart', startDrawing, options);
-            canvas.addEventListener('touchmove', draw, options);
-            canvas.addEventListener('touchend', stopDrawing, options);
-
-            return () => {
-              canvas.removeEventListener('mousedown', startDrawing);
-              canvas.removeEventListener('mousemove', draw);
-              canvas.removeEventListener('mouseup', stopDrawing);
-              canvas.removeEventListener('mouseout', stopDrawing);
-              canvas.removeEventListener('touchstart', startDrawing, options);
-              canvas.removeEventListener('touchmove', draw, options);
-              canvas.removeEventListener('touchend', stopDrawing, options);
-            };
-          }, []); // Executa apenas uma vez
+          const sigPadRef = useRef(null);
+          // Acede à biblioteca 'react-signature-canvas' carregada no window
+          // CORREÇÃO: O nome global é SignaturePad
+          const SignaturePad = window.SignaturePad;
 
           const clear = () => {
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            setIsEmpty(true);
+            sigPadRef.current.clear();
           };
+          
           const save = () => {
-            if (isEmpty) {
+            if (sigPadRef.current.isEmpty()) {
               alert("Por favor, forneça a assinatura.");
               return;
             }
-            const sigDataUrl = canvasRef.current.toDataURL('image/png');
+            // A biblioteca usa esta função exata, tal como o nosso componente manual
+            const sigDataUrl = sigPadRef.current.getTrimmedCanvas().toDataURL('image/png');
             onSave(sigDataUrl);
           };
 
@@ -302,9 +225,11 @@
               <h3 className="text-lg font-semibold text-center text-white">{title}</h3>
               {/* 'touch-none' é importante para o Tailwind não interferir com os eventos de toque */}
               <div className="relative w-full h-40 bg-gray-100 rounded-md">
-                <canvas
-                  ref={canvasRef}
-                  className="w-full h-full rounded-md touch-none" // A classe 'touch-none' é CRÍTICA
+                <SignaturePad
+                  ref={sigPadRef}
+                  canvasProps={{
+                    className: 'w-full h-full rounded-md' // A biblioteca trata do touch
+                  }}
                 />
               </div>
               <div className="flex justify-center gap-4">
@@ -1182,6 +1107,7 @@
 
           // Salva a transação final
           const handleFinalize = async () => {
+            const isDeliver = transaction.type === 'deliver'; // Move a definição para aqui
             if (!delivererSig || (isDeliver && !receiverSig)) {
               alert("Todas as assinaturas obrigatórias devem ser fornecidas.");
               return;
@@ -1351,9 +1277,6 @@
           const [currentPage, setCurrentPage] = useState('dashboard');
           const [currentTx, setCurrentTx] = useState(null); // Armazena o OBJETO da transação
           const [showModal, setShowModal] = useState(false);
-          
-          // Ouve o hook de histórico (para a página de histórico)
-          // const { addHistoryItem } = useHistory(sector); // Não precisamos mais disto
           
           // Ouve o hook de inventário (para diminuição de stock)
           const { items: inventoryItems } = useInventory(sector); 
@@ -1532,6 +1455,8 @@
         const AppWrapper = () => {
           const [txId, setTxId] = useState(null);
           const [isCheckingUrl, setIsCheckingUrl] = useState(true);
+          const [libsLoaded, setLibsLoaded] = useState(false); // (NOVO)
+          const [error, setError] = useState(null);
 
           useEffect(() => {
             // Verifica se a URL contém um tx_id (fluxo do tablet)
@@ -1541,7 +1466,31 @@
               setTxId(urlTxId);
             }
             setIsCheckingUrl(false);
-          }, []);
+          }, []); // Verifica a URL
+          
+          useEffect(() => {
+             // Verifica se a biblioteca de assinatura carregou
+             // Espera até 3 segundos
+            if (window.SignaturePad) { // <-- CORRIGIDO
+                setLibsLoaded(true);
+                return;
+            }
+            
+            let attempts = 0;
+            const interval = setInterval(() => {
+                if (window.SignaturePad) { // <-- CORRIGIDO
+                    setLibsLoaded(true);
+                    clearInterval(interval);
+                } else if (attempts > 30) { // 3 segundos
+                    clearInterval(interval);
+                    console.error("ERRO CRÍTICO: react-signature-canvas (SignaturePad) não carregou.");
+                    setError("Não foi possível carregar o módulo de assinatura.");
+                }
+                attempts++;
+            }, 100);
+            
+            return () => clearInterval(interval);
+          }, []); // Verifica a biblioteca
 
           // Verifica se o config do Firebase foi preenchido
           if (!firebaseConfig || firebaseConfig.apiKey.startsWith("AIzaSy") === false) {
@@ -1555,10 +1504,21 @@
             );
           }
           
-          if (isCheckingUrl) {
+          if (error) {
+             return (
+              <div className="flex items-center justify-center h-screen bg-gray-900 text-red-400">
+                <div className="p-8 text-center bg-gray-800 rounded-lg">
+                  <h2 className="text-2xl font-bold">Erro de Carregamento</h2>
+                  <p className="mt-4">{error}</p>
+                </div>
+              </div>
+            );
+          }
+          
+          if (isCheckingUrl || !libsLoaded) {
              return (
               <div className="flex items-center justify-center h-screen bg-gray-900 text-amazon-orange">
-                <p className="text-2xl animate-pulse">A verificar URL...</p>
+                <p className="text-2xl animate-pulse">A carregar aplicação...</p>
               </div>
             );
           }
