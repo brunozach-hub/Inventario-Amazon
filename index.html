@@ -32,7 +32,7 @@
         /**
          * Sistema de Inventário (TI & EPI)
          * Versão Firebase com fluxo de "Folha Virtual" (pending_transactions)
-         * V.Final - Corrigido problema de 'touch'
+         * V.Final - Corrigido problema de 'touch' (com bloqueio de scroll)
          */
 
         const { useState, useEffect, useRef, createContext, useContext } = React;
@@ -1151,6 +1151,23 @@
             };
             fetchTx();
           }, [txId]);
+          
+          // --- CORREÇÃO GARANTIDA PARA TOUCH ---
+          // Força o bloqueio do scroll na página inteira
+          // para que o navegador não "roube" os eventos de toque.
+          useEffect(() => {
+              // Ao montar, bloqueia o scroll
+              document.body.style.overflow = 'hidden';
+              document.documentElement.style.overflow = 'hidden';
+
+              // Ao desmontar (ou ao completar/errar), restaura o scroll
+              return () => {
+                  document.body.style.overflow = 'auto';
+                  document.documentElement.style.overflow = 'auto';
+              };
+          }, []); // Executa apenas uma vez quando a página de assinatura carrega
+          // --- FIM DA CORREÇÃO ---
+
 
           // Helper: Converte DataURL (Base64) para Blob
           const dataURLtoBlob = (dataurl) => {
