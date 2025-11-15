@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventário Amazon (Protótipo Firebase)</title>
+    
+    <!-- 1. Carrega o TailwindCSS para estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. Carrega as bibliotecas React e ReactDOM -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+    
+    <!-- 3. Carrega o Babel Standalone -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 4. Carrega os SDKs do Firebase (MUITO IMPORTANTE) -->
+    <!-- Usamos a versão 8.x.x que é compatível com este tipo de importação "global" -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+
+</head>
+<body class="bg-gray-900">
+    
+    <div id="root"></div>
+
+    <script type="text/babel">
+
+        /**
+         * Sistema de Inventário (TI & EPI)
+         * Versão Firebase
+         */
+
+        const { useState, useEffect, useRef, createContext, useContext } = React;
+
+        // --- Configuração do Firebase ---
+
+        // <--- COLOQUE AQUI O SEU FIREBASECONFIG --->
+        const firebaseConfig = {
+          apiKey: "AIzaSyDOaiJi4bujh9qKazg3WTa8FRafP4JjcnE",
+          authDomain: "inventario-214d0.firebaseapp.com",
+          projectId: "inventario-214d0",
+          storageBucket: "inventario-214d0.firebasestorage.app",
+          messagingSenderId: "376934741672",
+          appId: "1:376934741672:web:d18bba996169c0e9d3349d",
+          measurementId: "G-KDX02T8YEL"
+        };
+        // <--- FIM DA CONFIGURAÇÃO ---
+
+
+        // Inicializa o Firebase
+        // Verificamos se já foi inicializado para evitar erros
+        let app;
+        if (!firebase.apps.length) {
+          app = firebase.initializeApp(firebaseConfig);
+        } else {
+          app = firebase.app(); // Usa a app já existente
+        }
+
+        // Instâncias dos serviços Firebase
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
+
+        // --- Componente de Ícones (Substitui Lucide) ---
+        const Icons = {
+          LogIn: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          ),
+          LogOut: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          ),
+          User: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          ),
+          HardDrive: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg>
+          ),
+          HardHat: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2z"/><path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M4 15v-3a8 8 0 0 1 16 0v3"/></svg>
+          ),
+          PackagePlus: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 16h6v-6h-6v6z"/><path d="M12 12h10v6h-10z"/><path d="M2 12h10v6H2z"/><path d="M7 12v-2h6v2"/><path d="M7 12v-6h.01"/><path d="M16 16v-4h.01"/><path d="M19 19v3"/><path d="M5 19v3"/><path d="M12 19v3"/><line x1="12" y1="8" x2="12" y2="14"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+          ),
+          ArrowRightLeft: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><line x1="3" y1="5" x2="21" y2="5"/><polyline points="7 23 3 19 7 15"/><line x1="21" y1="19" x2="3" y2="19"/></svg>
+          ),
+          History: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          ),
+          QrCode: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          ),
+          Tablet: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          ),
+          X: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          ),
+          Check: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          ),
+          ArrowLeft: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          ),
+          ClipboardList: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          ),
+          FileText: (props) => ( // <-- NOVO ÍCONE
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          ),
+          Box: (props) => (
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          ),
+        };
+
+        const Icon = ({ name, size = 24, className = "" }) => {
+          const SvgComponent = Icons[name];
+          if (!SvgComponent) return <span className="text-red-500">?</span>;
+          return <SvgComponent width={size} height={size} className={className} />;
+        };
+
+        // --- Contexto de Autenticação (REESCRITO PARA FIREBASE) ---
+        const AuthContext = createContext();
+
+        const AuthProvider = ({ children }) => {
+          const [user, setUser] = useState(null); // Objeto de utilizador do Firebase
+          const [loading, setLoading] = useState(true);
+          const [sector, setSector] = useState(null); // 'TI' ou 'EPI'
+          const [username, setUsername] = useState(''); // 'Bruno' ou 'Roberto'
+
+          // Ouve as mudanças de estado do login
+          useEffect(() => {
+            const unsubscribe = auth.onAuthStateChanged(firebaseUser => {
+              if (firebaseUser) {
+                setUser(firebaseUser);
+                // Lógica para determinar o setor e nome
+                if (firebaseUser.email === 'vbrudasi@amazon.com') {
+                  setSector('TI');
+                  setUsername('vbrudasi');
+                } else if (firebaseUser.email === 'taisreis@amazon.com') {
+                  setSector('EPI');
+                  setUsername('taisreis');
+                }
+              } else {
+                setUser(null);
+                setSector(null);
+                setUsername('');
+              }
+              setLoading(false);
+            });
+            return () => unsubscribe(); // Limpa o listener
+          }, []);
+
+          // Função de Login
+          const login = async (email, password) => {
+            try {
+              await auth.signInWithEmailAndPassword(email, password);
+              return { success: true };
+            } catch (error) {
+              console.error("Erro no login:", error);
+              return { success: false, message: 'Email ou palavra-passe inválidos.' };
+            }
+          };
+
+          // Função de Logout
+          const logout = async () => {
+            try {
+              await auth.signOut();
+            } catch (error) {
+              console.error("Erro no logout:", error);
+            }
+          };
+
+          if (loading) {
+            return (
+              <div className="flex items-center justify-center h-screen bg-gray-900 text-amazon-orange">
+                <p className="text-2xl animate-pulse">A ligar ao Firebase...</p>
+              </div>
+            );
+          }
+
+          return (
+            <AuthContext.Provider value={{ user, login, logout, sector, username }}>
+              {children}
+            </AuthContext.Provider>
+          );
+        };
+
+        const useAuth = () => useContext(AuthContext);
+
+        // --- Componente de Assinatura (Sem alterações) ---
+        const SignatureCapture = ({ title, onSave }) => {
+          const canvasRef = useRef(null);
+          const [isDrawing, setIsDrawing] = useState(false);
+          const [isEmpty, setIsEmpty] = useState(true);
+          const lastPos = useRef({ x: 0, y: 0 });
+
+          const getPos = (e) => {
+            e.preventDefault(); 
+            const rect = canvasRef.current.getBoundingClientRect();
+            const scaleX = canvasRef.current.width / rect.width;
+            const scaleY = canvasRef.current.height / rect.height;
+            if (e.touches && e.touches.length > 0) {
+              return {
+                x: (e.touches[0].clientX - rect.left) * scaleX,
+                y: (e.touches[0].clientY - rect.top) * scaleY,
+              };
+            } else {
+              return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY,
+              };
+            }
+          };
+          const startDrawing = (e) => {
+            const pos = getPos(e);
+            lastPos.current = pos;
+            setIsDrawing(true);
+          };
+          const draw = (e) => {
+            if (!isDrawing) return;
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(lastPos.current.x, lastPos.current.y);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            lastPos.current = pos;
+            setIsEmpty(false);
+          };
+          const stopDrawing = (e) => {
+            setIsDrawing(false);
+          };
+          useEffect(() => {
+            const canvas = canvasRef.current;
+            if (!canvas) return; 
+            const rect = canvas.getBoundingClientRect();
+            const dpi = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpi;
+            canvas.height = rect.height * dpi;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return; 
+            ctx.scale(dpi, dpi);
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing); 
+            const options = { passive: false };
+            canvas.addEventListener('touchstart', startDrawing, options);
+            canvas.addEventListener('touchmove', draw, options);
+            canvas.addEventListener('touchend', stopDrawing, options);
+            return () => {
+              canvas.removeEventListener('mousedown', startDrawing);
+              canvas.removeEventListener('mousemove', draw);
+              canvas.removeEventListener('mouseup', stopDrawing);
+              canvas.removeEventListener('mouseout', stopDrawing);
+              canvas.removeEventListener('touchstart', startDrawing, options);
+              canvas.removeEventListener('touchmove', draw, options);
+              canvas.removeEventListener('touchend', stopDrawing, options);
+            };
+          }, []); 
+          const clear = () => {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            setIsEmpty(true);
+          };
+          const save = () => {
+            if (isEmpty) {
+              alert("Por favor, forneça a assinatura.");
+              return;
+            }
+            const sigDataUrl = canvasRef.current.toDataURL('image/png');
+            onSave(sigDataUrl);
+          };
+
+          return (
+            <div className="flex flex-col gap-2 p-4 border rounded-lg border-amazon-orange/30 neon-shadow-orange-sm">
+              <h3 className="text-lg font-semibold text-center text-white">{title}</h3>
+              <div className="relative w-full h-40 bg-gray-100 rounded-md touch-none">
+                <canvas
+                  ref={canvasRef}
+                  className="w-full h-full rounded-md"
+                />
+              </div>
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={clear}
+                  className="px-4 py-2 text-white transition-all bg-gray-600 rounded-lg hover:bg-gray-500 neon-shadow-gray-sm"
+                >
+                  Limpar
+                </button>
+                <button
+                  onClick={save}
+                  className="flex items-center gap-2 px-4 py-2 text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 neon-shadow-orange-sm"
+                >
+                  <Icon name="Check" size={18} />
+                  Salvar Assinatura
+                </button>
+              </div>
+            </div>
+          );
+        };
+
+        // --- Componentes de UI (Inputs, Selects) ---
+        const NeonInput = ({ label, id, ...props }) => (
+          <div className="w-full">
+            <label htmlFor={id} className="block mb-2 text-sm font-medium text-amazon-orange">
+              {label}
+            </label>
+            <input
+              id={id}
+              className="w-full px-3 py-2 text-white transition-all bg-gray-800 border border-transparent rounded-lg focus:border-amazon-orange focus:outline-none focus:ring-2 focus:ring-amazon-orange/50 neon-shadow-input"
+              {...props}
+            />
+          </div>
+        );
+        const NeonSelect = ({ label, id, children, ...props }) => (
+          <div className="w-full">
+            <label htmlFor={id} className="block mb-2 text-sm font-medium text-amazon-orange">
+              {label}
+            </label>
+            <select
+              id={id}
+              className="w-full px-3 py-2 text-white transition-all bg-gray-800 border border-transparent rounded-lg appearance-none focus:border-amazon-orange focus:outline-none focus:ring-2 focus:ring-amazon-orange/50 neon-shadow-input"
+              {...props}
+            >
+              {children}
+            </select>
+          </div>
+        );
+        
+        // --- NOVO Componente: NeonTextArea ---
+        const NeonTextArea = ({ label, id, ...props }) => (
+          <div className="w-full">
+            <label htmlFor={id} className="block mb-2 text-sm font-medium text-amazon-orange">
+              {label}
+            </label>
+            <textarea
+              id={id}
+              rows="3"
+              className="w-full px-3 py-2 text-white transition-all bg-gray-800 border border-transparent rounded-lg focus:border-amazon-orange focus:outline-none focus:ring-2 focus:ring-amazon-orange/50 neon-shadow-input"
+              {...props}
+            />
+          </div>
+        );
+
+        // --- Botão de Voltar ---
+        const BackButton = ({ onNavigate, targetPage = 'dashboard' }) => {
+          return (
+            <button
+              onClick={() => onNavigate(targetPage)}
+              className="flex items-center gap-2 mb-4 text-sm transition-all text-amazon-orange/80 hover:text-amazon-orange hover:underline"
+            >
+              <Icon name="ArrowLeft" size={18} />
+              Voltar ao Painel
+            </button>
+          );
+        };
+
+        
+        // --- Hook para gerir o Inventário (REESCRITO PARA FIREBASE) ---
+        const useInventory = (sector) => {
+          const [items, setItems] = useState([]);
+          const [loading, setLoading] = useState(true);
+
+          useEffect(() => {
+            if (!sector) {
+              setItems([]);
+              setLoading(false);
+              return;
+            };
+
+            // Ouve em tempo real por mudanças no inventário do setor
+            const unsubscribe = db.collection("inventory")
+              .where("sector", "==", sector)
+              .onSnapshot(
+                (snapshot) => {
+                  const inventoryData = snapshot.docs.map(doc => ({
+                    ...doc.data(),
+                    docId: doc.id // Guarda o ID do documento
+                  }));
+                  setItems(inventoryData);
+                  setLoading(false);
+                },
+                (error) => {
+                  console.error("Erro ao buscar inventário:", error);
+                  setLoading(false);
+                }
+              );
+
+            return () => unsubscribe(); // Limpa o listener
+          }, [sector]);
+
+          return { items, loading };
+        };
+        
+        // --- Hook para gerir o Histórico (REESCRITO PARA FIREBASE) ---
+        const useHistory = (sector) => {
+          const [history, setHistory] = useState([]);
+          const [loading, setLoading] = useState(true);
+
+          useEffect(() => {
+            if (!sector) {
+              setHistory([]);
+              setLoading(false);
+              return;
+            };
+
+            // Ouve em tempo real o histórico do setor
+            const unsubscribe = db.collection("history")
+              .where("sector", "==", sector)
+              // .orderBy("dateTime", "desc") // <-- REMOVIDO PARA EVITAR ERRO DE ÍNDICE
+              .onSnapshot(
+                (snapshot) => {
+                  const historyData = snapshot.docs.map(doc => ({
+                    ...doc.data(),
+                    docId: doc.id
+                  }));
+
+                  // **FIX:** Ordena os dados no lado do cliente (javascript)
+                  historyData.sort((a, b) => {
+                    const dateA = a.dateTime?.toDate ? a.dateTime.toDate().getTime() : 0;
+                    const dateB = b.dateTime?.toDate ? b.dateTime.toDate().getTime() : 0;
+                    return dateB - dateA; // Descendente (mais recente primeiro)
+                  });
+
+                  setHistory(historyData);
+                  setLoading(false);
+                },
+                (error) => {
+                  console.error("Erro ao buscar histórico:", error);
+                  setLoading(false);
+                }
+              );
+
+            return () => unsubscribe();
+          }, [sector]);
+          
+          // Adiciona um item ao histórico (agora é uma função normal)
+          const addHistoryItem = async (item) => {
+            try {
+              // Adiciona o 'sector' para filtros de segurança futuros
+              await db.collection("history").add({
+                ...item,
+                sector: sector
+              });
+            } catch (error) {
+              console.error("Erro ao adicionar item ao histórico:", error);
+              alert("Erro ao salvar histórico. Tente novamente.");
+            }
+          };
+
+          return { history, loading, addHistoryItem };
+        };
+
+
+        // --- Página: Login (REESCRITA PARA FIREBASE) ---
+        const LoginPage = () => {
+          const [email, setEmail] = useState('');
+          const [password, setPassword] = useState('');
+          const [error, setError] = useState('');
+          const [loading, setLoading] = useState(false);
+          const { login } = useAuth();
+          
+          // **FIX:** Ref para verificar se o componente está montado
+          const isMounted = useRef(true);
+          useEffect(() => {
+            isMounted.current = true;
+            return () => {
+              isMounted.current = false; // Define como falso na desmontagem
+            };
+          }, []);
+
+
+          const handleSubmit = async (e) => {
+            e.preventDefault();
+            setError('');
+            setLoading(true);
+            const result = await login(email, password);
+            
+            // **FIX:** Só atualiza o estado se o componente ainda estiver montado
+            if (isMounted.current) {
+              if (!result.success) {
+                setError(result.message);
+              }
+              setLoading(false);
+            }
+          };
+
+          return (
+            <div className="flex items-center justify-center min-h-screen p-4 bg-gray-900">
+              <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 border rounded-lg border-amazon-orange/30 neon-shadow-orange-lg">
+                <div className="flex justify-center">
+                  <Icon name="Box" size={96} className="text-amazon-orange" />
+                </div>
+                <h2 className="text-3xl font-bold text-center text-white">
+                  Inventário <span className="text-amazon-orange">Amazon</span>
+                </h2>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <NeonInput
+                    label="Email (ex: vbrudasi@amazon.com)"
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                  <NeonInput
+                    label="Palavra-passe (ex: Amazon123)"
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  {error && (
+                    <p className="text-sm text-center text-red-400">{error}</p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex items-center justify-center w-full gap-2 px-4 py-3 font-semibold text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800 neon-shadow-orange-lg disabled:opacity-50"
+                  >
+                    {loading ? "A entrar..." : (
+                      <React.Fragment>
+                        <Icon name="LogIn" size={20} /> Entrar
+                      </React.Fragment>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </div>
+          );
+        };
+
+        // --- Página: Dashboard (Menu Principal) ---
+        const DashboardPage = ({ onNavigate }) => {
+          const { username, sector } = useAuth();
+          const IconComponent = sector === 'TI' ? Icons.HardDrive : Icons.HardHat;
+
+          return (
+            <div className="flex flex-col items-center max-w-6xl p-8 mx-auto">
+              <IconComponent size={64} className="mb-4 text-amazon-orange" />
+              <h2 className="text-3xl font-bold text-white">
+                Painel de Controle - <span className="text-amazon-orange">{sector}</span>
+              </h2>
+              <p className="mb-12 text-gray-400">Bem-vindo, {username}.</p>
+              <div className="grid w-full grid-cols-1 gap-6 mb-6 md:grid-cols-3">
+                <button
+                  onClick={() => onNavigate('include')}
+                  className="flex flex-col items-center justify-center gap-4 p-8 transition-all bg-gray-800 rounded-lg border-2 border-transparent hover:border-amazon-orange hover:bg-gray-700 neon-shadow-orange-sm-hover"
+                >
+                  <Icon name="PackagePlus" size={48} className="text-amazon-orange" />
+                  <span className="text-xl font-semibold text-white">Incluir Item</span>
+                  <span className="text-sm text-center text-gray-400">Adicionar um novo item ao estoque.</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('transfer')}
+                  className="flex flex-col items-center justify-center gap-4 p-8 transition-all bg-gray-800 rounded-lg border-2 border-transparent hover:border-amazon-orange hover:bg-gray-700 neon-shadow-orange-sm-hover"
+                >
+                  <Icon name="ArrowRightLeft" size={48} className="text-amazon-orange" />
+                  <span className="text-xl font-semibold text-white">Transferir Item</span>
+                  <span className="text-sm text-center text-gray-400">Mover um item para outro local.</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('deliver')}
+                  className="flex flex-col items-center justify-center gap-4 p-8 transition-all bg-gray-800 rounded-lg border-2 border-transparent hover:border-amazon-orange hover:bg-gray-700 neon-shadow-orange-sm-hover"
+                >
+                  <Icon name="User" size={48} className="text-amazon-orange" />
+                  <span className="text-xl font-semibold text-white">Entregar Item</span>
+                  <span className="text-sm text-center text-gray-400">Registrar a entrega a um colaborador.</span>
+                </button>
+              </div>
+              <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2">
+                <button
+                  onClick={() => onNavigate('inventory')}
+                  className="flex flex-col items-center justify-center gap-4 p-8 transition-all bg-gray-800 rounded-lg border-2 border-transparent hover:border-amazon-orange hover:bg-gray-700 neon-shadow-orange-sm-hover"
+                >
+                  <Icon name="ClipboardList" size={48} className="text-amazon-orange" />
+                  <span className="text-xl font-semibold text-white">Ver Inventário</span>
+                  <span className="text-sm text-center text-gray-400">Listar todos os itens em estoque.</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('history')}
+                  className="flex flex-col items-center justify-center gap-4 p-8 transition-all bg-gray-800 rounded-lg border-2 border-transparent hover:border-amazon-orange hover:bg-gray-700 neon-shadow-orange-sm-hover"
+                >
+                  <Icon name="History" size={48} className="text-amazon-orange" />
+                  <span className="text-xl font-semibold text-white">Histórico</span>
+                  <span className="text-sm text-center text-gray-400">Ver todas as transações finalizadas.</span>
+                </button>
+              </div>
+            </div>
+          );
+        };
+
+        // --- Página: Formulário de Entrega (Usa Inventário do Firebase) ---
+        const DeliverItemPage = ({ onNavigate, onSubmit }) => {
+          const { username, sector } = useAuth();
+          const { items, loading } = useInventory(sector); // Carrega o inventário real
+          const [formData, setFormData] = useState({
+            receiver: '',
+            item: '',
+            reason: '',
+          });
+
+          const handleChange = (e) => {
+            const { id, value } = e.target;
+            setFormData((prev) => ({ ...prev, [id]: value }));
+          };
+          
+          const getBrasiliaTime = () => {
+             // Retorna um objeto Timestamp do Firebase, melhor para ordenar
+            return firebase.firestore.Timestamp.now();
+          };
+
+          const handleSubmit = (e) => {
+            e.preventDefault();
+            const selectedItem = items.find(i => i.nome === formData.item);
+            if (!selectedItem) {
+              alert("Item inválido selecionado.");
+              return;
+            }
+
+            // TODO: Lógica de diminuir a quantidade do inventário (Passo futuro)
+            // ex: db.collection('inventory').doc(selectedItem.docId).update({
+            //   quantidade: firebase.firestore.FieldValue.increment(-1)
+            // });
+
+            const transaction = {
+              ...formData,
+              type: 'deliver',
+              deliverer: username,
+              dateTime: getBrasiliaTime(),
+              tx_id: `tx_${Date.now()}`,
+            };
+            onSubmit(transaction);
+          };
+
+          return (
+            <div className="max-w-2xl p-8 mx-auto">
+              <BackButton onNavigate={onNavigate} />
+              <h2 className="flex items-center gap-3 mb-8 text-3xl font-bold text-white">
+                <Icon name="User" size={32} className="text-amazon-orange" />
+                Registrar Entrega de Item
+              </h2>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <NeonInput label="Entregador" id="deliverer" value={username} readOnly />
+                  <NeonInput label="Data/Hora" id="dateTime" value={new Date().toLocaleString('pt-BR')} readOnly />
+                </div>
+                <NeonInput
+                  label="Nome de Quem Recebeu"
+                  id="receiver"
+                  value={formData.receiver}
+                  onChange={handleChange}
+                  required
+                />
+                <NeonSelect
+                  label="Item Entregue"
+                  id="item"
+                  value={formData.item}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                >
+                  <option value="">{loading ? "A carregar itens..." : "Selecione um item..."}</option>
+                  {items.map(item => (
+                    <option key={item.docId} value={item.nome}>{item.nome} (Disp: {item.quantidade})</option>
+                  ))}
+                </NeonSelect>
+                <NeonInput
+                  label="Motivo da Entrega"
+                  id="reason"
+                  value={formData.reason}
+                  onChange={handleChange}
+                  required
+                />
+                <button
+                  type="submit"
+                  className="flex items-center justify-center w-full gap-2 px-4 py-3 font-semibold text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800 neon-shadow-orange-lg"
+                >
+                  <Icon name="QrCode" size={20} />
+                  Gerar QR Code para Assinaturas
+                </button>
+              </form>
+            </div>
+          );
+        };
+
+        // --- Página: Formulário de Transferência (Usa Inventário do Firebase) ---
+        const TransferItemPage = ({ onNavigate, onSubmit }) => {
+          const { username, sector } = useAuth();
+          const { items, loading } = useInventory(sector); // Carrega o inventário real
+          const [formData, setFormData] = useState({
+            location: '',
+            item: '',
+            reason: '',
+          });
+
+          const handleChange = (e) => {
+            const { id, value } = e.target;
+            setFormData((prev) => ({ ...prev, [id]: value }));
+          };
+
+          const getBrasiliaTime = () => {
+            return firebase.firestore.Timestamp.now();
+          };
+
+          const handleSubmit = (e) => {
+            e.preventDefault();
+            
+            // TODO: Lógica de diminuir a quantidade do inventário (Passo futuro)
+
+            const transaction = {
+              ...formData,
+              type: 'transfer',
+              deliverer: username,
+              dateTime: getBrasiliaTime(),
+              tx_id: `tx_${Date.now()}`,
+            };
+            onSubmit(transaction);
+          };
+
+          return (
+            <div className="max-w-2xl p-8 mx-auto">
+              <BackButton onNavigate={onNavigate} />
+              <h2 className="flex items-center gap-3 mb-8 text-3xl font-bold text-white">
+                <Icon name="ArrowRightLeft" size={32} className="text-amazon-orange" />
+                Registrar Transferência de Item
+              </h2>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <NeonInput label="Responsável" id="deliverer" value={username} readOnly />
+                  <NeonInput label="Data/Hora" id="dateTime" value={new Date().toLocaleString('pt-BR')} readOnly />
+                </div>
+                <NeonInput
+                  label="Local de Destino"
+                  id="location"
+                  value={formData.location}
+                  onChange={handleChange}
+                  required
+                />
+                <NeonSelect
+                  label="Item Transferido"
+                  id="item"
+                  value={formData.item}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                >
+                  <option value="">{loading ? "A carregar itens..." : "Selecione um item..."}</option>
+                  {items.map(item => (
+                    <option key={item.docId} value={item.nome}>{item.nome} (Disp: {item.quantidade})</option>
+                  ))}
+                </NeonSelect>
+                <NeonInput
+                  label="Motivo da Transferência"
+                  id="reason"
+                  value={formData.reason}
+                  onChange={handleChange}
+                  required
+                />
+                <button
+                  type="submit"
+                  className="flex items-center justify-center w-full gap-2 px-4 py-3 font-semibold text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800 neon-shadow-orange-lg"
+                >
+                  <Icon name="QrCode" size={20} />
+                  Gerar QR Code para Assinatura
+                </button>
+              </form>
+            </div>
+          );
+        };
+
+        // --- Página: Inclusão de Item (REESCRITA PARA FIREBASE) ---
+        const IncludeItemPage = ({ onNavigate }) => {
+          const { sector } = useAuth();
+          const [itemName, setItemName] = useState('');
+          const [serial, setSerial] = useState('');
+          const [quantity, setQuantity] = useState(1);
+          const [description, setDescription] = useState(''); // <-- NOVO ESTADO
+          const [loading, setLoading] = useState(false);
+          
+          const handleSubmit = async (e) => {
+              e.preventDefault();
+              setLoading(true);
+              
+              try {
+                // Adiciona o novo item ao Firestore
+                await db.collection('inventory').add({
+                  nome: itemName,
+                  serial: serial || '',
+                  quantidade: parseInt(quantity, 10),
+                  description: description || '', // <-- NOVO CAMPO
+                  sector: sector,
+                  id: `item_${Date.now()}` // ID simples
+                });
+                
+                alert(`Item "${itemName}" (x${quantity}) incluído com sucesso!`);
+                setLoading(false);
+                onNavigate('dashboard');
+
+              } catch (error) {
+                console.error("Erro ao incluir item:", error);
+                alert("Erro ao salvar o item. Tente novamente.");
+                setLoading(false);
+              }
+          };
+
+          return (
+            <div className="max-w-2xl p-8 mx-auto">
+              <BackButton onNavigate={onNavigate} />
+              <h2 className="flex items-center gap-3 mb-8 text-3xl font-bold text-white">
+                <Icon name="PackagePlus" size={32} className="text-amazon-orange" />
+                Incluir Novo Item no Estoque ({sector})
+              </h2>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <NeonInput 
+                  label="Nome do Item" 
+                  id="itemName" 
+                  value={itemName} 
+                  onChange={(e) => setItemName(e.target.value)} 
+                  required 
+                />
+                <NeonInput 
+                  label="Número de Série (se aplicável)" 
+                  id="serial" 
+                  value={serial}
+                  onChange={(e) => setSerial(e.target.value)}
+                />
+                <NeonTextArea // <-- NOVO CAMPO DE FORMULÁRIO
+                  label="Descrição (Opcional)"
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+                <NeonInput 
+                  label="Quantidade" 
+                  id="quantity" 
+                  type="number" 
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  min="1"
+                  required 
+                />
+                
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex items-center justify-center w-full gap-2 px-4 py-3 font-semibold text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 focus:ring-offset-gray-800 neon-shadow-orange-lg disabled:opacity-50"
+                >
+                  {loading ? "A salvar..." : "Salvar Novo Item"}
+                </button>
+              </form>
+            </div>
+          );
+        };
+        
+        // --- Página: Histórico (REESCRITA PARA FIREBASE) ---
+        const HistoryPage = ({ onNavigate }) => {
+          const { sector } = useAuth();
+          const { history, loading } = useHistory(sector);
+          const [selectedTx, setSelectedTx] = useState(null);
+          
+          // Formata o Timestamp do Firebase
+          const formatTimestamp = (timestamp) => {
+            if (!timestamp) return 'Data inválida';
+            // Converte o Timestamp do Firebase para um objeto Date
+            return timestamp.toDate().toLocaleString('pt-BR');
+          };
+
+          return (
+            <div className="max-w-6xl p-8 mx-auto">
+              <BackButton onNavigate={onNavigate} />
+              <h2 className="flex items-center gap-3 mb-8 text-3xl font-bold text-white">
+                <Icon name="History" size={32} className="text-amazon-orange" />
+                Histórico de Transações ({sector})
+              </h2>
+
+              {loading ? (
+                 <p className="text-center text-amazon-orange animate-pulse">A carregar histórico...</p>
+              ) : history.length === 0 ? (
+                <p className="text-center text-gray-400">Nenhuma transação registrada ainda.</p>
+              ) : (
+                <div className="overflow-x-auto bg-gray-800 rounded-lg neon-shadow-input">
+                  <table className="w-full text-left table-auto">
+                    {/* CORREÇÃO validateDOMNesting: Remover espaço em branco */}
+                    <thead className="border-b border-gray-700"><tr>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange">Data/Hora</th>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange">Tipo</th>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange">Item</th>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange">Para</th>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange">Assinaturas</th>
+                    </tr></thead>
+                    {/* CORREÇÃO validateDOMNesting: Remover espaço em branco */}
+                    <tbody>{history.map(tx => {
+                        const isDeliver = tx.type === 'deliver';
+                        return (
+                          <tr key={tx.tx_id} className="border-b border-gray-700/50 hover:bg-gray-700/50">
+                            <td className="p-4">{formatTimestamp(tx.dateTime)}</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                isDeliver ? 'bg-blue-600/30 text-blue-300' : 'bg-purple-600/30 text-purple-300'
+                              }`}>
+                                {isDeliver ? 'Entrega' : 'Transferência'}
+                              </span>
+                            </td>
+                            <td className="p-4">{tx.item}</td>
+                            <td className="p-4">{isDeliver ? tx.receiver : tx.location}</td>
+                            <td className="p-4">
+                              <button 
+                                onClick={() => setSelectedTx(tx)}
+                                className="text-sm text-amazon-orange hover:underline"
+                              >
+                                Ver Prova
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}</tbody>
+                  </table>
+                </div>
+              )}
+              
+              {/* Modal para ver assinaturas (Usa URLs do Firebase Storage) */}
+              {selectedTx && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedTx(null)}>
+                  <div className="relative w-full max-w-2xl p-8 bg-gray-800 border rounded-lg border-amazon-orange/30 neon-shadow-orange-lg" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setSelectedTx(null)} className="absolute text-gray-400 top-4 right-4 hover:text-white">
+                      <Icon name="X" size={24} />
+                    </button>
+                    <h3 className="mb-6 text-2xl font-bold text-white">Prova de Transação</h3>
+                    <div className="mb-6 text-gray-300">
+                      <p><strong>Item:</strong> {selectedTx.item}</p>
+                      <p><strong>Data:</strong> {formatTimestamp(selectedTx.dateTime)}</p>
+                      <p><strong>De:</strong> {selectedTx.deliverer}</p>
+                      <p><strong>Para:</strong> {selectedTx.type === 'deliver' ? selectedTx.receiver : selectedTx.location}</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="text-center">
+                        <h4 className="font-semibold text-white">Assinatura (Entregador)</h4>
+                        <img src={selectedTx.delivererSigUrl} className="w-full h-auto mt-2 bg-white rounded" alt="Assinatura Entregador" />
+                      </div>
+                      {selectedTx.type === 'deliver' && selectedTx.receiverSigUrl && (
+                        <div className="text-center">
+                          <h4 className="font-semibold text-white">Assinatura (Recebedor)</h4>
+                          <img src={selectedTx.receiverSigUrl} className="w-full h-auto mt-2 bg-white rounded" alt="Assinatura Recebedor" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+        
+        // --- Página: Inventário (REESCRITA PARA FIREBASE) ---
+        const InventoryPage = ({ onNavigate }) => {
+          const { sector } = useAuth();
+          const { items, loading } = useInventory(sector);
+          const [selectedDescription, setSelectedDescription] = useState(null); // <-- NOVO ESTADO
+
+          return (
+            <div className="max-w-4xl p-8 mx-auto">
+              <BackButton onNavigate={onNavigate} />
+              <h2 className="flex items-center gap-3 mb-8 text-3xl font-bold text-white">
+                <Icon name="ClipboardList" size={32} className="text-amazon-orange" />
+                Inventário Atual ({sector})
+              </h2>
+
+              {loading ? (
+                <p className="text-center text-amazon-orange animate-pulse">A carregar inventário...</p>
+              ) : items.length === 0 ? (
+                <p className="text-center text-gray-400">Nenhum item de inventário encontrado. (Use a página "Incluir Item".)</p>
+              ) : (
+                <div className="overflow-x-auto bg-gray-800 rounded-lg neon-shadow-input">
+                  <table className="w-full text-left table-auto">
+                    {/* CORREÇÃO validateDOMNesting: Remover espaço em branco */}
+                    <thead className="border-b border-gray-700"><tr>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange">ID do Item</th>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange">Nome do Item</th>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange text-right">Quantidade</th>
+                        <th className="p-4 text-sm font-semibold text-amazon-orange text-center">Descrição</th>
+                    </tr></thead>
+                    {/* CORREÇÃO validateDOMNesting: Remover espaço em branco */}
+                    <tbody>{items.map(item => (
+                        <tr key={item.docId} className="border-b border-gray-700/50 hover:bg-gray-700/50">
+                          <td className="p-4">{item.id}</td>
+                          <td className="p-4">{item.nome}</td>
+                          <td className="p-4 text-right">{item.quantidade}</td>
+                          <td className="p-4 text-center">
+                            <button 
+                              onClick={() => setSelectedDescription(item.description || 'Nenhuma descrição fornecida.')}
+                              className="text-amazon-orange disabled:text-gray-600 disabled:no-underline hover:underline"
+                              disabled={!item.description}
+                            >
+                              <Icon name="FileText" size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}</tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* --- NOVO MODAL (MINI TELINHA) --- */}
+              {selectedDescription !== null && (
+                <div 
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" 
+                  onClick={() => setSelectedDescription(null)}
+                >
+                  <div 
+                    className="relative w-full max-w-md p-6 bg-gray-800 border rounded-lg border-amazon-orange/30 neon-shadow-orange-lg" 
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <button 
+                      onClick={() => setSelectedDescription(null)} 
+                      className="absolute text-gray-400 top-3 right-3 hover:text-white"
+                    >
+                      <Icon name="X" size={20} />
+                    </button>
+                    <h3 className="flex items-center gap-2 mb-4 text-xl font-bold text-white">
+                      <Icon name="FileText" size={20} className="text-amazon-orange" />
+                      Descrição do Item
+                    </h3>
+                    <div className="p-4 text-gray-300 bg-gray-900 rounded-md max-h-60 overflow-y-auto">
+                      {/* Permite quebras de linha na descrição */}
+                      <p style={{ whiteSpace: 'pre-wrap' }}>{selectedDescription}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* --- FIM DO NOVO MODAL --- */}
+
+            </div>
+          );
+        };
+
+        // --- Modal: QR Code (Sem alterações) ---
+        const SignatureModal = ({ transaction, onClose, onSignOnThisDevice }) => {
+          const signUrl = `${window.location.origin}${window.location.pathname}?page=sign&tx_id=${transaction.tx_id}`;
+          const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(signUrl)}`;
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <div className="relative w-full max-w-lg p-8 bg-gray-800 border rounded-lg border-amazon-orange/30 neon-shadow-orange-lg">
+                <button onClick={onClose} className="absolute text-gray-400 top-4 right-4 hover:text-white">
+                  <Icon name="X" size={24} />
+                </button>
+                <h2 className="flex items-center gap-3 mb-6 text-2xl font-bold text-white">
+                  <Icon name="Tablet" size={28} className="text-amazon-orange" />
+                  Assinatura no Tablet
+                </h2>
+                <p className="mb-4 text-center text-gray-300">
+                  Use a câmera do tablet para escanear o QR Code abaixo e coletar as assinaturas.
+                </p>
+                <div className="flex justify-center p-4 bg-white rounded-lg">
+                  <img src={qrCodeUrl} alt="QR Code para assinatura" width="250" height="250" />
+                </div>
+                <div className="mt-6 text-sm text-gray-400">
+                  <h4 className="font-semibold text-white">Detalhes da Transação:</h4>
+                  <p><strong>Item:</strong> {transaction.item}</p>
+                  <p><strong>De:</strong> {transaction.deliverer}</p>
+                  <p><strong>Para:</strong> {transaction.type === 'deliver' ? transaction.receiver : transaction.location}</p>
+                </div>
+                <button 
+                  onClick={onSignOnThisDevice}
+                  className="w-full px-4 py-2 mt-6 text-gray-900 transition-all rounded-lg bg-gray-300 hover:bg-white"
+                >
+                  (Simular Assinatura neste Dispositivo)
+                </button>
+              </div>
+            </div>
+          );
+        };
+
+        // --- Página: Assinatura (REESCRITA PARA FIREBASE STORAGE) ---
+        const SignaturePage = ({ transaction, onComplete, onCancel }) => {
+          const [delivererSig, setDelivererSig] = useState(null); // Base64
+          const [receiverSig, setReceiverSig] = useState(null); // Base64
+          const [isLoading, setIsLoading] = useState(false);
+
+          const { username } = useAuth();
+          const isDeliver = transaction.type === 'deliver';
+
+          // Helper: Converte DataURL (Base64) para Blob
+          const dataURLtoBlob = (dataurl) => {
+            const arr = dataurl.split(',');
+            const mime = arr[0].match(/:(.*?);/)[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while(n--){
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new Blob([u8arr], {type:mime});
+          }
+
+          // Salva a transação final
+          const handleFinalize = async () => {
+            if (!delivererSig || (isDeliver && !receiverSig)) {
+              alert("Todas as assinaturas obrigatórias devem ser fornecidas.");
+              return;
+            }
+
+            setIsLoading(true);
+
+            try {
+              // 1. Enviar Assinatura do Entregador para o Storage
+              const delivererBlob = dataURLtoBlob(delivererSig);
+              const delivererRef = storage.ref(`signatures/${transaction.tx_id}/deliverer.png`);
+              await delivererRef.put(delivererBlob);
+              const delivererSigUrl = await delivererRef.getDownloadURL();
+
+              let receiverSigUrl = null;
+              // 2. Enviar Assinatura do Recebedor (se houver)
+              if (isDeliver) {
+                const receiverBlob = dataURLtoBlob(receiverSig);
+                const receiverRef = storage.ref(`signatures/${transaction.tx_id}/receiver.png`);
+                await receiverRef.put(receiverBlob);
+                receiverSigUrl = await receiverRef.getDownloadURL();
+              }
+              
+              // 3. Criar o objeto final da transação com os URLs
+              const finalTransaction = {
+                ...transaction,
+                delivererSigUrl,
+                receiverSigUrl,
+              };
+              
+              // Removemos as assinaturas Base64 (não precisamos delas no DB)
+              delete finalTransaction.delivererSig; 
+              delete finalTransaction.receiverSig;
+
+              // 4. Salvar a transação no Firestore (função passada por prop)
+              await onComplete(finalTransaction);
+              
+              alert('Transação finalizada e salva com sucesso!');
+              // A navegação será tratada pelo componente App
+
+            } catch (error) {
+              console.error("Erro ao finalizar transação:", error);
+              alert("Falha ao salvar assinaturas. Tente novamente.");
+              setIsLoading(false);
+            }
+          };
+          
+          const allSignaturesCollected = delivererSig && (isDeliver ? receiverSig : true);
+
+          return (
+            <div className="max-w-4xl p-8 mx-auto">
+              <BackButton onNavigate={onCancel} targetPage="dashboard" />
+              <h2 className="flex items-center gap-3 mb-6 text-3xl font-bold text-white">
+                <Icon name="Tablet" size={32} className="text-amazon-orange" />
+                Coletar Assinaturas
+              </h2>
+              
+              <div className="p-6 mb-8 bg-gray-800 rounded-lg neon-shadow-input">
+                <h3 className="mb-4 text-xl font-semibold text-amazon-orange">Detalhes da Transação</h3>
+                <div className="grid grid-cols-2 gap-4 text-gray-300">
+                  <p><strong>Item:</strong> {transaction.item}</p>
+                  <p><strong>Data/Hora:</strong> {transaction.dateTime.toDate().toLocaleString('pt-BR')}</p>
+                  <p><strong>Entregador:</strong> {transaction.deliverer}</p>
+                  {isDeliver ? (
+                    <p><strong>Recebedor:</strong> {transaction.receiver}</p>
+                  ) : (
+                    <p><strong>Local:</strong> {transaction.location}</p>
+                  )}
+                  <p className="col-span-2"><strong>Motivo:</strong> {transaction.reason}</p>
+                </div>
+              </div>
+              
+              <div className={`grid grid-cols-1 ${isDeliver ? 'md:grid-cols-2' : ''} gap-8`}>
+                {/* Assinatura do Entregador */}
+                {!delivererSig ? (
+                  <SignatureCapture
+                    title={`Assinatura (Entregador: ${username})`}
+                    onSave={setDelivererSig}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-4 text-center border rounded-lg border-green-500/50 bg-green-900/30">
+                    <Icon name="Check" size={48} className="text-green-400" />
+                    <h3 className="mt-4 text-lg font-semibold text-white">Assinatura do Entregador Coletada</h3>
+                    <img src={delivererSig} className="w-auto h-24 mt-2 bg-white rounded" alt="Assinatura" />
+                  </div>
+                )}
+
+                {/* Assinatura do Recebedor */}
+                {isDeliver && !receiverSig && (
+                  <SignatureCapture
+                    title={`Assinatura (Recebedor: ${transaction.receiver})`}
+                    onSave={setReceiverSig}
+                  />
+                )}
+                {isDeliver && receiverSig && (
+                  <div className="flex flex-col items-center justify-center p-4 text-center border rounded-lg border-green-500/50 bg-green-900/30">
+                    <Icon name="Check" size={48} className="text-green-400" />
+                    <h3 className="mt-4 text-lg font-semibold text-white">Assinatura do Recebedor Coletada</h3>
+                    <img src={receiverSig} className="w-auto h-24 mt-2 bg-white rounded" alt="Assinatura" />
+                  </div>
+                )}
+              </div>
+
+              {allSignaturesCollected && (
+                <button
+                  onClick={handleFinalize}
+                  disabled={isLoading}
+                  className="flex items-center justify-center w-full gap-2 px-4 py-3 mt-12 text-2xl font-semibold text-gray-900 transition-all rounded-lg bg-green-500 hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-gray-800 neon-shadow-green-lg disabled:opacity-50"
+                >
+                  {isLoading ? (
+                    "A salvar na nuvem..."
+                  ) : (
+                    <React.Fragment>
+                      <Icon name="Check" size={28} />
+                      Finalizar e Salvar Transação
+                    </React.Fragment>
+                  )}
+                </button>
+              )}
+            </div>
+          );
+        };
+
+
+        // --- Componente Principal (App) ---
+        const App = () => {
+          const { user, logout, sector, username } = useAuth();
+          const [currentPage, setCurrentPage] = useState('dashboard');
+          const [currentTx, setCurrentTx] = useState(null); 
+          const [showModal, setShowModal] = useState(false);
+          const { addHistoryItem } = useHistory(sector); // Carrega o hook de histórico
+
+          // Gestor de navegação
+          useEffect(() => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('page') === 'sign' && params.get('tx_id')) {
+              // Lógica para carregar transação via URL (mais complexo, para V2)
+              console.warn("Modo de assinatura via URL detetado.");
+              // Por agora, o fluxo de simulação é o principal
+            }
+          }, []);
+
+          const navigate = (page) => {
+            setCurrentPage(page);
+          };
+
+          const handleFormSubmit = (transaction) => {
+            setCurrentTx(transaction);
+            setShowModal(true);
+          };
+
+          const handleSignOnThisDevice = () => {
+            setShowModal(false);
+            setCurrentPage('sign');
+          };
+
+          const handleSignatureCancel = () => {
+            setCurrentTx(null);
+            setCurrentPage('dashboard');
+          };
+
+          // Função chamada pela SignaturePage quando tudo está pronto
+          const handleSignatureComplete = async (finalTransaction) => {
+            await addHistoryItem(finalTransaction); // Salva no Firestore
+            setCurrentTx(null);
+            setCurrentPage('dashboard');
+          };
+
+          // Renderização principal
+          if (!user) {
+            return <LoginPage />;
+          }
+
+          // Renderiza o layout principal após o login
+          const renderPage = () => {
+            switch (currentPage) {
+              case 'dashboard':
+                return <DashboardPage onNavigate={navigate} />;
+              case 'include':
+                return <IncludeItemPage onNavigate={navigate} />;
+              case 'transfer':
+                return <TransferItemPage onNavigate={navigate} onSubmit={handleFormSubmit} />;
+              case 'deliver':
+                return <DeliverItemPage onNavigate={navigate} onSubmit={handleFormSubmit} />;
+              case 'history':
+                return <HistoryPage onNavigate={navigate} />;
+              case 'inventory':
+                return <InventoryPage onNavigate={navigate} />;
+              case 'sign':
+                if (!currentTx) {
+                    navigate('dashboard');
+                    return null;
+                }
+                return <SignaturePage 
+                         transaction={currentTx} 
+                         onComplete={handleSignatureComplete} 
+                         onCancel={handleSignatureCancel}
+                       />;
+              default:
+                return <DashboardPage onNavigate={navigate} />;
+            }
+          };
+
+          return (
+            <div className="min-h-screen text-gray-200 bg-gray-900 font-inter">
+              {/* Header Fixo */}
+              <header className="flex items-center justify-between p-4 bg-gray-800 border-b-2 border-amazon-orange/50 neon-shadow-orange-bottom">
+                <div className="flex items-center gap-3">
+                  <Icon name="Box" size={40} className="text-amazon-orange" />
+                  <span className="text-xl font-bold text-white">Inventário</span>
+                  <span 
+                    onClick={() => navigate('dashboard')} 
+                    className="px-3 py-1 ml-4 text-sm font-medium rounded-full cursor-pointer bg-amazon-orange/20 text-amazon-orange hover:bg-amazon-orange/40"
+                  >
+                    {sector}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-gray-400 hidden md:block">Olá, {username}</span>
+                  <button
+                    onClick={logout}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-white transition-all bg-gray-700 rounded-lg hover:bg-red-600 neon-shadow-gray-sm"
+                  >
+                    <Icon name="LogOut" size={16} />
+                    Sair
+                  </button>
+                </div>
+              </header>
+              
+              <main className="p-4 md:p-8">
+                {renderPage()}
+              </main>
+
+              {showModal && currentTx && (
+                <SignatureModal 
+                  transaction={currentTx}
+                  onClose={() => setShowModal(false)}
+                  onSignOnThisDevice={handleSignOnThisDevice}
+                />
+              )}
+            </div>
+          );
+        };
+
+
+        // --- Estilos Globais (Sem alterações) ---
+        const GlobalStyles = () => {
+          const style = `
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+            body { font-family: 'Inter', sans-serif; }
+            :root { --amazon-orange: #FF9900; --amazon-dark: #232F3E; }
+            .font-inter { font-family: 'Inter', sans-serif; }
+            .text-amazon-orange { color: var(--amazon-orange); }
+            .bg-amazon-orange { background-color: var(--amazon-orange); }
+            .border-amazon-orange { border-color: var(--amazon-orange); }
+            .neon-shadow-orange-lg { box-shadow: 0 0 15px rgba(255, 153, 0, 0.6), 0 0 5px rgba(255, 153, 0, 0.8); }
+            .neon-shadow-orange-sm { box-shadow: 0 0 8px rgba(255, 153, 0, 0.5); }
+            .neon-shadow-orange-sm-hover:hover { box-shadow: 0 0 12px rgba(255, 153, 0, 0.7); }
+            .neon-shadow-green-lg { box-shadow: 0 0 15px rgba(52, 211, 153, 0.6); }
+            .neon-shadow-gray-sm { box-shadow: 0 0 5px rgba(156, 163, 175, 0.4); }
+            .neon-shadow-input { box-shadow: 0 0 0px 2px rgba(255, 153, 0, 0); transition: box-shadow 0.2s ease-in-out; }
+            .neon-shadow-input:focus { box-shadow: 0 0 8px 2px rgba(255, 153, 0, 0.5); }
+            .neon-shadow-orange-bottom { box-shadow: 0 4px 14px 0 rgba(255, 153, 0, 0.3); }
+            .touch-none { touch-action: none; }
+          `;
+          // CORREÇÃO: Passar a string 'style' diretamente como filha
+          return React.createElement('style', null, style);
+        };
+
+        // --- Renderização do App ---
+        const AppWrapper = () => {
+          // Verifica se o config do Firebase foi preenchido
+          if (!firebaseConfig || firebaseConfig.apiKey.startsWith("AIzaSy") === false) {
+            return (
+              <div className="flex items-center justify-center h-screen bg-gray-900 text-red-400">
+                <div className="p-8 text-center bg-gray-800 rounded-lg">
+                  <h2 className="text-2xl font-bold">Configuração Pendente</h2>
+                  <p className="mt-4">Por favor, edite o ficheiro `inventario-firebase.html` e cole o seu objeto `firebaseConfig`.</p>
+                  <p className="mt-2 text-sm text-gray-400">Siga o Passo 3 do ficheiro `passo-a-passo-firebase.md`.</p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <AuthProvider>
+              <GlobalStyles />
+              <App />
+            </AuthProvider>
+          );
+        };
+
+        // --- Ponto de Entrada ---
+        ReactDOM.render(<AppWrapper />, document.getElementById('root'));
+
+    </script>
+</body>
+</html>
