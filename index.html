@@ -32,6 +32,7 @@
         /**
          * Sistema de Inventário (TI & EPI)
          * Versão Firebase com fluxo de "Folha Virtual" (pending_transactions)
+         * V.Final - Corrigido problema de 'touch'
          */
 
         const { useState, useEffect, useRef, createContext, useContext } = React;
@@ -108,10 +109,7 @@
             <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
           ),
           FileText: (props) => (
-            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          ),
-          Edit3: (props) => ( // <-- NOVO ÍCONE
-            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
           ),
           Box: (props) => (
             <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -202,11 +200,13 @@
           const canvasRef = useRef(null);
           const [isDrawing, setIsDrawing] = useState(false);
           const [isEmpty, setIsEmpty] = useState(true);
-          const [isSigningActive, setIsSigningActive] = useState(false); // <-- NOVO ESTADO
           const lastPos = useRef({ x: 0, y: 0 });
 
           const getPos = (e) => {
+            // Previne o scroll da página enquanto desenha no tablet
+            // Esta é a parte MAIS IMPORTANTE para o 'touch' funcionar.
             e.preventDefault(); 
+            
             const rect = canvasRef.current.getBoundingClientRect();
             const scaleX = canvasRef.current.width / rect.width;
             const scaleY = canvasRef.current.height / rect.height;
@@ -223,13 +223,12 @@
             }
           };
           const startDrawing = (e) => {
-            if (!isSigningActive) return; // <-- ADICIONADO: Guarda de segurança
             const pos = getPos(e);
             lastPos.current = pos;
             setIsDrawing(true);
           };
           const draw = (e) => {
-            if (!isDrawing || !isSigningActive) return; // <-- ADICIONADO: Guarda de segurança
+            if (!isDrawing) return;
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             const pos = getPos(e);
@@ -243,6 +242,7 @@
           const stopDrawing = (e) => {
             setIsDrawing(false);
           };
+          
           useEffect(() => {
             const canvas = canvasRef.current;
             if (!canvas) return; 
@@ -257,14 +257,20 @@
             ctx.lineWidth = 2;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
+            
+            // Eventos do Mouse
             canvas.addEventListener('mousedown', startDrawing);
             canvas.addEventListener('mousemove', draw);
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing); 
+            
+            // Eventos de Toque (para tablet)
+            // 'passive: false' é crucial para o e.preventDefault() funcionar
             const options = { passive: false };
             canvas.addEventListener('touchstart', startDrawing, options);
             canvas.addEventListener('touchmove', draw, options);
             canvas.addEventListener('touchend', stopDrawing, options);
+
             return () => {
               canvas.removeEventListener('mousedown', startDrawing);
               canvas.removeEventListener('mousemove', draw);
@@ -274,13 +280,13 @@
               canvas.removeEventListener('touchmove', draw, options);
               canvas.removeEventListener('touchend', stopDrawing, options);
             };
-          }, []); 
+          }, []); // Executa apenas uma vez
+
           const clear = () => {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             setIsEmpty(true);
-            setIsSigningActive(false); // <-- Desativa o modo de assinatura ao limpar
           };
           const save = () => {
             if (isEmpty) {
@@ -294,51 +300,25 @@
           return (
             <div className="flex flex-col gap-2 p-4 border rounded-lg border-amazon-orange/30 neon-shadow-orange-sm">
               <h3 className="text-lg font-semibold text-center text-white">{title}</h3>
-              {/* 'touch-none' movido para o canvas para funcionar em mobile */}
+              {/* 'touch-none' é importante para o Tailwind não interferir com os eventos de toque */}
               <div className="relative w-full h-40 bg-gray-100 rounded-md">
-                {/* Overlay para bloquear o desenho quando não está ativo */}
-                {!isSigningActive && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center text-gray-500 bg-gray-100/70">
-                    (Clique em "Assinar" para ativar)
-                  </div>
-                )}
-                {/* Canvas nativo */}
                 <canvas
                   ref={canvasRef}
-                  className={`w-full h-full rounded-md ${isSigningActive ? 'touch-none' : 'pointer-events-none'}`}
+                  className="w-full h-full rounded-md touch-none" // A classe 'touch-none' é CRÍTICA
                 />
               </div>
-              <div className="flex justify-center gap-2">
-                {/* --- BOTÃO DE ATIVAÇÃO (NOVO) --- */}
-                {!isSigningActive ? (
-                  <button
-                    onClick={() => setIsSigningActive(true)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-900 transition-all rounded-lg bg-yellow-400 hover:bg-yellow-300 neon-shadow-orange-sm"
-                  >
-                    <Icon name="Edit3" size={16} />
-                    Assinar
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setIsSigningActive(false)}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-white transition-all bg-green-600 rounded-lg hover:bg-green-500"
-                  >
-                    <Icon name="Check" size={16} />
-                    OK
-                  </button>
-                )}
-                
+              <div className="flex justify-center gap-4">
                 <button
                   onClick={clear}
-                  className="px-3 py-2 text-sm text-white transition-all bg-gray-600 rounded-lg hover:bg-gray-500 neon-shadow-gray-sm"
+                  className="px-4 py-2 text-white transition-all bg-gray-600 rounded-lg hover:bg-gray-500 neon-shadow-gray-sm"
                 >
                   Limpar
                 </button>
                 <button
                   onClick={save}
-                  className="flex items-center gap-2 px-3 py-2 text-sm text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 neon-shadow-orange-sm"
+                  className="flex items-center gap-2 px-4 py-2 text-gray-900 transition-all rounded-lg bg-amazon-orange hover:bg-yellow-400 neon-shadow-orange-sm"
                 >
-                  <Icon name="Check" size={16} />
+                  <Icon name="Check" size={18} />
                   Salvar Assinatura
                 </button>
               </div>
@@ -460,7 +440,7 @@
                     ...doc.data(),
                     docId: doc.id
                   }));
-                  // Ordenação no cliente para evitar índices compostos complexos
+                  // Ordenação no cliente para evitar índices complexos
                   historyData.sort((a, b) => {
                     const dateA = a.dateTime?.toDate ? a.dateTime.toDate().getTime() : 0;
                     const dateB = b.dateTime?.toDate ? b.dateTime.toDate().getTime() : 0;
@@ -630,6 +610,7 @@
           };
           
           const getBrasiliaTime = () => {
+            // Usa o Timestamp do servidor Firebase para consistência
             return firebase.firestore.Timestamp.now();
           };
 
@@ -894,7 +875,7 @@
           
           const formatTimestamp = (timestamp) => {
             if (!timestamp) return 'Data inválida';
-            // Converte Timestamp do Firebase para Objeto Date
+            // Converte o Timestamp do Firebase para Data
             return timestamp.toDate().toLocaleString('pt-BR');
           };
 
@@ -913,6 +894,7 @@
               ) : (
                 <div className="overflow-x-auto bg-gray-800 rounded-lg neon-shadow-input">
                   <table className="w-full text-left table-auto">
+                    {/* Compactado para evitar erro 'validateDOMNesting' */}
                     <thead className="border-b border-gray-700"><tr>
                         <th className="p-4 text-sm font-semibold text-amazon-orange">Data/Hora</th>
                         <th className="p-4 text-sm font-semibold text-amazon-orange">Tipo</th>
@@ -966,12 +948,20 @@
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="text-center">
                         <h4 className="font-semibold text-white">Assinatura (Entregador)</h4>
-                        <img src={selectedTx.delivererSigUrl} className="w-full h-auto mt-2 bg-white rounded" alt="Assinatura Entregador" />
+                        {selectedTx.delivererSigUrl ? (
+                          <img src={selectedTx.delivererSigUrl} className="w-full h-auto mt-2 bg-white rounded" alt="Assinatura Entregador" />
+                        ) : (
+                          <p className="text-gray-400">(Não disponível)</p>
+                        )}
                       </div>
-                      {selectedTx.type === 'deliver' && selectedTx.receiverSigUrl && (
+                      {selectedTx.type === 'deliver' && (
                         <div className="text-center">
                           <h4 className="font-semibold text-white">Assinatura (Recebedor)</h4>
-                          <img src={selectedTx.receiverSigUrl} className="w-full h-auto mt-2 bg-white rounded" alt="Assinatura Recebedor" />
+                          {selectedTx.receiverSigUrl ? (
+                            <img src={selectedTx.receiverSigUrl} className="w-full h-auto mt-2 bg-white rounded" alt="Assinatura Recebedor" />
+                          ) : (
+                             <p className="text-gray-400">(Não disponível)</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1003,6 +993,7 @@
               ) : (
                 <div className="overflow-x-auto bg-gray-800 rounded-lg neon-shadow-input">
                   <table className="w-full text-left table-auto">
+                    {/* Compactado para evitar erro 'validateDOMNesting' */}
                     <thead className="border-b border-gray-700"><tr>
                         <th className="p-4 text-sm font-semibold text-amazon-orange">ID do Item</th>
                         <th className="p-4 text-sm font-semibold text-amazon-orange">Nome do Item</th>
@@ -1050,7 +1041,6 @@
                       Descrição do Item
                     </h3>
                     <div className="p-4 text-gray-300 bg-gray-900 rounded-md max-h-60 overflow-y-auto">
-                      {/* white-space: pre-wrap preserva as quebras de linha da descrição */}
                       <p style={{ whiteSpace: 'pre-wrap' }}>{selectedDescription}</p>
                     </div>
                   </div>
@@ -1071,22 +1061,10 @@
               try {
                 // 1. Salva a transação como "pendente" no Firestore
                 const docRef = db.collection('pending_transactions').doc(transaction.tx_id);
-                // Assegura que o objeto de transação é "limpo" para o Firestore
-                const cleanTransaction = {
-                    item: transaction.item,
-                    receiver: transaction.receiver || null,
-                    location: transaction.location || null,
-                    reason: transaction.reason,
-                    type: transaction.type,
-                    deliverer: transaction.deliverer,
-                    dateTime: transaction.dateTime,
-                    tx_id: transaction.tx_id,
-                    selectedItemDocId: transaction.selectedItemDocId,
-                    sector: transaction.sector,
-                    status: 'pending' // Define o status inicial
-                };
-                
-                await docRef.set(cleanTransaction);
+                await docRef.set({
+                  ...transaction,
+                  status: 'pending'
+                });
 
                 // 2. Gera o link e o QR Code
                 const signUrl = `${window.location.origin}${window.location.pathname}?tx_id=${transaction.tx_id}`;
@@ -1103,7 +1081,7 @@
               }
             };
             setupTransaction();
-          }, []); // Dependência vazia para executar apenas uma vez
+          }, [transaction]); // Executa uma vez
           
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -1158,11 +1136,10 @@
               try {
                 const docRef = db.collection('pending_transactions').doc(txId);
                 const doc = await docRef.get();
-                
                 if (!doc.exists) {
                   setError("Transação não encontrada ou expirada.");
                 } else if (doc.data().status === 'completed') {
-                  setIsComplete(true); // Já foi completada
+                  setIsComplete(true);
                 } else {
                   setTransaction(doc.data());
                 }
@@ -1188,9 +1165,6 @@
 
           // Salva a transação final
           const handleFinalize = async () => {
-            // CORREÇÃO: Verifica o tipo de transação a partir do estado `transaction`
-            const isDeliver = transaction.type === 'deliver';
-
             if (!delivererSig || (isDeliver && !receiverSig)) {
               alert("Todas as assinaturas obrigatórias devem ser fornecidas.");
               return;
@@ -1204,7 +1178,7 @@
               const delivererSigUrl = await delivererRef.getDownloadURL();
 
               let receiverSigUrl = null;
-              // 2. Enviar Assinatura do Recebedor (se for entrega)
+              // 2. Enviar Assinatura do Recebedor
               if (isDeliver) {
                 const receiverBlob = dataURLtoBlob(receiverSig);
                 const receiverRef = storage.ref(`signatures/${transaction.tx_id}/receiver.png`);
@@ -1216,8 +1190,8 @@
               const docRef = db.collection('pending_transactions').doc(txId);
               await docRef.update({
                 status: 'completed',
-                delivererSigUrl,
-                receiverSigUrl // Será null se for 'transfer', o que está correto
+                delivererSigUrl: delivererSigUrl || null,
+                receiverSigUrl: receiverSigUrl || null
               });
 
               setIsSaving(false);
@@ -1262,15 +1236,14 @@
             );
           }
           
-          // CORREÇÃO: Garante que 'transaction' não é nulo antes de aceder 'type'
+          // Correção: Apenas aceda a 'transaction.type' se 'transaction' não for nulo.
           if (!transaction) {
-            // Este estado não devia ser alcançado por causa do 'loading' e 'error'
-            // mas é uma salvaguarda.
              return (
               <div className="flex items-center justify-center min-h-screen p-4 bg-gray-900">
                 <div className="w-full max-w-md p-8 text-center bg-gray-800 rounded-lg">
-                    <h2 className="mt-4 text-2xl font-bold text-white">Erro Inesperado</h2>
-                    <p className="mt-2 text-gray-300">A transação é nula. Tente novamente.</p>
+                    <Icon name="X" size={64} className="mx-auto text-red-500" />
+                    <h2 className="mt-4 text-2xl font-bold text-white">Erro</h2>
+                    <p className="mt-2 text-gray-300">Não foi possível carregar os dados da transação.</p>
                 </div>
               </div>
             );
@@ -1359,11 +1332,11 @@
         const App = () => {
           const { user, logout, sector, username } = useAuth();
           const [currentPage, setCurrentPage] = useState('dashboard');
-          const [currentTx, setCurrentTx] = useState(null); // Objeto da transação pendente
+          const [currentTx, setCurrentTx] = useState(null); // Armazena o OBJETO da transação
           const [showModal, setShowModal] = useState(false);
           
           // Ouve o hook de histórico (para a página de histórico)
-          // const { addHistoryItem } = useHistory(sector); // Não é mais necessário, o listener faz isso
+          // const { addHistoryItem } = useHistory(sector); // Não precisamos mais disto
           
           // Ouve o hook de inventário (para diminuição de stock)
           const { items: inventoryItems } = useInventory(sector); 
@@ -1396,7 +1369,7 @@
                 if (data.selectedItemDocId) {
                   try {
                     const itemRef = db.collection('inventory').doc(data.selectedItemDocId);
-                    // Usa FieldValue.increment para uma atualização segura
+                    // Diminui o stock por 1
                     await itemRef.update({
                       quantidade: firebase.firestore.FieldValue.increment(-1)
                     });
@@ -1415,7 +1388,7 @@
                   pendingTxUnsubscribe.current = null;
                 }
                 setShowModal(false);
-                setCurrentTx(null); // Limpa a transação atual
+                setCurrentTx(null);
                 alert("Assinatura recebida e transação concluída!");
               }
             });
@@ -1427,8 +1400,8 @@
               pendingTxUnsubscribe.current();
               pendingTxUnsubscribe.current = null;
             }
-            // Apaga a transação pendente se for cancelada
-            if (currentTx && currentTx.tx_id) {
+            // Apagar a transação pendente se for cancelada
+            if (currentTx) {
                db.collection('pending_transactions').doc(currentTx.tx_id).delete()
                  .catch(err => console.warn("Falha ao limpar tx pendente", err));
             }
@@ -1442,7 +1415,7 @@
 
           // Passo 1 (PC): Cria a transação pendente
           const handleFormSubmit = (transaction) => {
-            setCurrentTx(transaction); // Guarda o OBJETO da transação
+            setCurrentTx(transaction); // Guarda o OBJETO
             setShowModal(true); // Abre o modal (que irá criar a tx)
           };
 
@@ -1534,6 +1507,7 @@
             .neon-shadow-orange-bottom { box-shadow: 0 4px 14px 0 rgba(255, 153, 0, 0.3); }
             .touch-none { touch-action: none; }
           `;
+          // CORREÇÃO: Passar a string 'style' diretamente como filha
           return React.createElement('style', null, style);
         };
 
@@ -1558,7 +1532,7 @@
               <div className="flex items-center justify-center h-screen bg-gray-900 text-red-400">
                 <div className="p-8 text-center bg-gray-800 rounded-lg">
                   <h2 className="text-2xl font-bold">Configuração Pendente</h2>
-                  <p className="mt-4">Por favor, edite o ficheiro e cole o seu objeto `firebaseConfig`.</p>
+                  <p className="mt-4">O objeto `firebaseConfig` não foi encontrado ou está incorreto.</p>
                 </div>
               </div>
             );
