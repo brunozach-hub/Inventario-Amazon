@@ -205,7 +205,10 @@
 
           const getPos = (e) => {
             // Previne o scroll da página enquanto desenha no tablet
-            e.preventDefault(); 
+            // (Apenas se for um evento de toque)
+            if (e.touches) {
+              e.preventDefault(); 
+            }
             
             const rect = canvasRef.current.getBoundingClientRect();
             const scaleX = canvasRef.current.width / rect.width;
@@ -265,20 +268,20 @@
             canvas.addEventListener('mouseout', stopDrawing); 
             
             // Eventos de Toque (para tablet)
-            // 'passive: false' é crucial para o e.preventDefault() funcionar
-            const options = { passive: false };
-            canvas.addEventListener('touchstart', startDrawing, options);
-            canvas.addEventListener('touchmove', draw, options);
-            canvas.addEventListener('touchend', stopDrawing, options);
+            // CORREÇÃO: Removido 'passive: false' para deixar o CSS 'touch-action: none'
+            // e o bloqueio de scroll da página fazerem o trabalho.
+            canvas.addEventListener('touchstart', startDrawing);
+            canvas.addEventListener('touchmove', draw);
+            canvas.addEventListener('touchend', stopDrawing);
 
             return () => {
               canvas.removeEventListener('mousedown', startDrawing);
               canvas.removeEventListener('mousemove', draw);
               canvas.removeEventListener('mouseup', stopDrawing);
               canvas.removeEventListener('mouseout', stopDrawing);
-              canvas.removeEventListener('touchstart', startDrawing, options);
-              canvas.removeEventListener('touchmove', draw, options);
-              canvas.removeEventListener('touchend', stopDrawing, options);
+              canvas.removeEventListener('touchstart', startDrawing);
+              canvas.removeEventListener('touchmove', draw);
+              canvas.removeEventListener('touchend', stopDrawing);
             };
           }, []); // Executa apenas uma vez
 
